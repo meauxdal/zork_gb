@@ -1,6 +1,8 @@
 #include <gb/gb.h>
-#include "z_memory.h"
+#include <gb/cgb.h>
+#include <stdint.h>
 #include <string.h>
+#include "z_memory.h"
 
 // The 4KB buffer for the "Dynamic" part of the Z-Machine
 uint8_t dynamic_ram[DYNAMIC_MEM_SIZE];

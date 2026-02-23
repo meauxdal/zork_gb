@@ -17,8 +17,8 @@ jobs:
       - name: Build ROM
         uses: addnab/docker-run-action@v3
         with:
-          # Using the verified z98/gbdk-2020 image which is generally more accessible
-          image: z98/gbdk-2020:latest
+          # This image is confirmed public and compatible with GBDK-2020 projects
+          image: daid/gbdk-2020:latest
           options: -v ${{ github.workspace }}:/src
           run: |
             cd /src

@@ -1,24 +1,70 @@
-# Directory for generated banked C files
-BANK_DIR := data
-BANK_HDR := $(BANK_DIR)/zork_data.h
+# Makefile - MVP build for Zork GB
 
-# Generate bank C files from the Z3 binary
-$(BANK_DIR)/zork_bank%.c $(BANK_HDR): data/zork1.z3
-	python3 tools/bin2banks.py data/zork1.z3 $(BANK_DIR) $(BANK_HDR) --start-bank 7
+CC = lcc
+CFLAGS = -Iinclude -Wa-l
+LDFLAGS = -Wl-m -Wl-j -Wl-yt0x1B -Wl-yo4 -Wl-ya1
 
-# Grab all bank .c files automatically
-BANK_SRCS := $(wildcard $(BANK_DIR)/zork_bank*.c)
-BANK_OBJS := $(patsubst $(BANK_DIR)/%.c,src/%.o,$(BANK_SRCS))
+SRCS = src/main.c \
+       src/z_memory.c \
+       src/z_dispatcher.c \
+       src/z_variable_stack.c \
+       src/z_string_decoder.c \
+       src/z_object_engine.c \
+       src/z_vwf_render.c \
+       src/zork_font.c \
+       src/workboy.c \
+       src/z_status_bar.c
 
-# Compile each bank into src/*.o
-src/%.o: $(BANK_DIR)/%.c
-	lcc -Iinclude -c -o $@ $<
+OBJS = $(SRCS:.c=.o) data/zork_data.o
 
-# Add bank objects to your main OBJS list
-OBJS := src/main.o src/z_memory.o src/z_dispatcher.o src/z_variable_stack.o \
-        src/z_string_decoder.o src/z_object_engine.o src/z_vwf_render.o \
-        src/zork_font.o src/workboy.o src/z_status_bar.o $(BANK_OBJS)
+ZORK_BIN = data/zork1.z3
+ZORK_OUT = data/zork_data
 
-# Final link
+# Default target
+all: zork_gb.gb
+
+# Link final ROM
 zork_gb.gb: $(OBJS)
-	lcc -Wa-l -Wl-m -Wl-j -Wl-yt0x1B -Wl-yo4 -Wl-ya1 -o $@ $(OBJS)
+	$(CC) $(LDFLAGS) -o $@ $(OBJS)
+
+# Compile each source file explicitly
+src/main.o: src/main.c
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+src/z_memory.o: src/z_memory.c
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+src/z_dispatcher.o: src/z_dispatcher.c
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+src/z_variable_stack.o: src/z_variable_stack.c
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+src/z_string_decoder.o: src/z_string_decoder.c
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+src/z_object_engine.o: src/z_object_engine.c
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+src/z_vwf_render.o: src/z_vwf_render.c
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+src/zork_font.o: src/zork_font.c
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+src/workboy.o: src/workboy.c
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+src/z_status_bar.o: src/z_status_bar.c
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+# Build Zork banked data
+data/zork_data.o: $(ZORK_BIN)
+	python3 tools/bin2banks.py $(ZORK_BIN) $(ZORK_OUT) data/zork_data.h
+	$(CC) $(CFLAGS) -c -o $@ $(ZORK_OUT)/zork_bank*.c
+
+# Clean build artifacts
+clean:
+	rm -f src/*.o data/*.o $(ZORK_OUT)/zork_bank*.c zork_gb.gb
+
+.PHONY: all clean

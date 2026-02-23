@@ -1,70 +1,41 @@
-# Makefile - MVP build for Zork GB
+# Makefile - MVP Green Build for Zork GB
 
+# Compiler and flags
 CC = lcc
 CFLAGS = -Iinclude -Wa-l
 LDFLAGS = -Wl-m -Wl-j -Wl-yt0x1B -Wl-yo4 -Wl-ya1
 
-SRCS = src/main.c \
-       src/z_memory.c \
-       src/z_dispatcher.c \
-       src/z_variable_stack.c \
-       src/z_string_decoder.c \
-       src/z_object_engine.c \
-       src/z_vwf_render.c \
-       src/zork_font.c \
-       src/workboy.c \
-       src/z_status_bar.c
+# Source directories
+SRC_DIR = src
+DATA_DIR = data/zork_data
 
-OBJS = $(SRCS:.c=.o) data/zork_data.o
+# Collect source files
+SRC = $(wildcard $(SRC_DIR)/*.c)
+DATA_SRC = $(wildcard $(DATA_DIR)/*.c)
 
-ZORK_BIN = data/zork1.z3
-ZORK_OUT = data/zork_data
+# Object files
+OBJ = $(SRC:.c=.o) $(DATA_SRC:.c=.o)
 
-# Default target
-all: zork_gb.gb
+# Target
+TARGET = zork_gb.gb
 
-# Link final ROM
-zork_gb.gb: $(OBJS)
-	$(CC) $(LDFLAGS) -o $@ $(OBJS)
+# Default rule
+all: $(TARGET)
 
-# Compile each source file explicitly
-src/main.o: src/main.c
+# Compile source files
+$(SRC_DIR)/%.o: $(SRC_DIR)/%.c
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-src/z_memory.o: src/z_memory.c
+# Compile data bank files
+$(DATA_DIR)/%.o: $(DATA_DIR)/%.c
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-src/z_dispatcher.o: src/z_dispatcher.c
-	$(CC) $(CFLAGS) -c -o $@ $<
+# Link everything
+$(TARGET): $(OBJ)
+	$(CC) $(LDFLAGS) -o $@ $(OBJ)
 
-src/z_variable_stack.o: src/z_variable_stack.c
-	$(CC) $(CFLAGS) -c -o $@ $<
-
-src/z_string_decoder.o: src/z_string_decoder.c
-	$(CC) $(CFLAGS) -c -o $@ $<
-
-src/z_object_engine.o: src/z_object_engine.c
-	$(CC) $(CFLAGS) -c -o $@ $<
-
-src/z_vwf_render.o: src/z_vwf_render.c
-	$(CC) $(CFLAGS) -c -o $@ $<
-
-src/zork_font.o: src/zork_font.c
-	$(CC) $(CFLAGS) -c -o $@ $<
-
-src/workboy.o: src/workboy.c
-	$(CC) $(CFLAGS) -c -o $@ $<
-
-src/z_status_bar.o: src/z_status_bar.c
-	$(CC) $(CFLAGS) -c -o $@ $<
-
-# Build Zork banked data
-data/zork_data.o: $(ZORK_BIN)
-	python3 tools/bin2banks.py $(ZORK_BIN) $(ZORK_OUT) data/zork_data.h
-	$(CC) $(CFLAGS) -c -o $@ $(ZORK_OUT)/zork_bank*.c
-
-# Clean build artifacts
+# Clean
 clean:
-	rm -f src/*.o data/*.o $(ZORK_OUT)/zork_bank*.c zork_gb.gb
+	rm -f $(SRC_DIR)/*.o $(DATA_DIR)/*.o $(TARGET)
 
 .PHONY: all clean

@@ -1,4 +1,3 @@
-#### FILE: include / z_string_decoder.h
 #ifndef Z_STRING_DECODER_H
 #define Z_STRING_DECODER_H
 

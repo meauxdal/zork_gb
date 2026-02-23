@@ -1,4 +1,3 @@
-#### FILE: include / z_variable_stack.h
 #ifndef Z_VARIABLE_STACK_H
 #define Z_VARIABLE_STACK_H
 

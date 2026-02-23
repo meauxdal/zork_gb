@@ -1,4 +1,3 @@
-#### FILE: src / z_object_engine.c
 #include "z_object_engine.h"
 #include "z_memory.h"
 
@@ -8,6 +7,12 @@ uint16_t get_object_address(uint8_t obj_id) {
     uint16_t object_entries = object_table + 62;
     // Each object entry is 9 bytes in V3
     return object_entries + (uint16_t)((obj_id - 1) * 9);
+}
+
+uint16_t get_object_property_table(uint8_t obj_id) {
+    /* Property table pointer is the last 2 bytes of the 9-byte object entry (offset 7) */
+    uint16_t addr = get_object_address(obj_id);
+    return z_read_word(addr + 7);
 }
 
 uint8_t get_object_parent(uint8_t obj_id) {

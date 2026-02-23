@@ -1,4 +1,3 @@
-#### FILE: src / z_variable_stack.c
 #include "z_variable_stack.h"
 #include "z_memory.h"
 #include "z_dispatcher.h"

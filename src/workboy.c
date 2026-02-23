@@ -13,6 +13,9 @@
 static uint8_t input_buffer[BUFFER_SIZE];
 static uint8_t buf_ptr = 0;
 
+/* Forward declaration — defined at the bottom of this file */
+void noworkboy_int_handler(void);
+
 void workboy_init(void) {
     // Initialize Serial I/O registers for Workboy protocol
     // MiSTer's Workboy implementation expects standard serial clocking

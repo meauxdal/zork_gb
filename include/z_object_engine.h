@@ -1,4 +1,3 @@
-#### FILE: include / z_object_engine.h
 #ifndef Z_OBJECT_ENGINE_H
 #define Z_OBJECT_ENGINE_H
 
@@ -16,6 +15,7 @@ uint16_t get_object_address(uint8_t obj_id);
 uint8_t  get_object_parent(uint8_t obj_id);
 uint8_t  get_object_sibling(uint8_t obj_id);
 uint8_t  get_object_child(uint8_t obj_id);
+uint16_t get_object_property_table(uint8_t obj_id);  /* returns address of property table for obj */
 
 void     insert_object(uint8_t obj_id, uint8_t destination_id);
 uint8_t  get_object_attr(uint8_t obj_id, uint8_t attr_id);

@@ -9,6 +9,22 @@
 
 uint16_t z_machine_pc = 0;
 
+void z_dispatcher_init(void) {
+    /* In Z-Machine V3, the initial PC is stored as a 2-byte word at header offset 0x06 */
+    z_machine_pc = z_read_word(0x06);
+}
+
+/* z_fetch_byte / z_fetch_word live here because they advance z_machine_pc */
+uint8_t z_fetch_byte(void) {
+    return z_read_byte(z_machine_pc++);
+}
+
+uint16_t z_fetch_word(void) {
+    uint16_t w = z_read_word(z_machine_pc);
+    z_machine_pc += 2;
+    return w;
+}
+
 /* Helper: Branching Logic */
 void handle_branch(uint8_t condition) {
     uint8_t branch_byte = z_fetch_byte();

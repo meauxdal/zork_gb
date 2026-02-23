@@ -1,4 +1,3 @@
-#### FILE: src / z_string_decoder.c
 #include "z_string_decoder.h"
 #include "z_memory.h"
 #include "z_dispatcher.h"
@@ -65,4 +64,13 @@ void decode_zstring_at_pc(void) {
         z_machine_pc += 2;
     }
     z_machine_pc += 2; // Step over the final word
+}
+
+/* Returns the number of bytes occupied by the Z-string at `address` */
+uint16_t get_zstring_length(uint16_t address) {
+    uint16_t start = address;
+    while (!(z_read_word(address) & 0x8000)) {
+        address += 2;
+    }
+    return (address - start) + 2; /* include the final terminating word */
 }

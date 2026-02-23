@@ -1,4 +1,3 @@
-#### FILE: src / main.c
 #include <gb/gb.h>
 #include <stdint.h>
 #include "z_memory.h"

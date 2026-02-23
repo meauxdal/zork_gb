@@ -1,9 +1,13 @@
 #ifndef Z_STATUS_BAR_H
 #define Z_STATUS_BAR_H
 
-#include "z_memory.h"
-#include "z_vwf_render.h"
+/*
+ * z_status_bar.h
+ *
+ * Renders the top row (row 0) status bar: current location name on the
+ * left, score/turns on the right (V3 score game type).
+ */
 
 void update_status_bar(void);
 
-#endif
+#endif /* Z_STATUS_BAR_H */

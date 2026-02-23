@@ -3,10 +3,14 @@
 
 #include <stdint.h>
 
-/**
- * Z-String Decoder
- * Converts Z-Machine encoded text into ASCII for the VWF renderer.
+/*
+ * z_string_decoder.h
+ *
+ * Decodes a Z-machine encoded string starting at `address`, printing each
+ * character via z_render_put_char(). Returns the address of the first byte
+ * *after* the string so the caller can advance the PC correctly.
  */
-void decode_zstring(uint32_t address);
 
-#endif
+uint32_t decode_zstring(uint32_t address);
+
+#endif /* Z_STRING_DECODER_H */

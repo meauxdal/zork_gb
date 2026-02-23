@@ -13,7 +13,6 @@
 #endif
 
 #define DYNAMIC_MEM_SIZE 0x1000
-#define Z_ROM_BANK       1
 
 // Core Memory Functions
 void z_init_memory(void);

@@ -3,7 +3,15 @@
 
 #include <stdint.h>
 
-void    workboy_init(void);
-uint8_t workboy_read_line(uint8_t *buffer, uint8_t max_len);
+/**
+ * Initializes the Workboy keyboard hardware.
+ */
+void workboy_init(void);
+
+/**
+ * Polls the keyboard for a single character.
+ * Returns 0 if no key is pressed.
+ */
+char workboy_get_char(void);
 
 #endif

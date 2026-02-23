@@ -1,12 +1,12 @@
-#### FILE: include / vwf_render.h
-#ifndef VWF_RENDER_H
-#define VWF_RENDER_H
+// #### FILE: src/z_vwf_render.h
+#ifndef Z_VWF_RENDER_H
+#define Z_VWF_RENDER_H
 
 #include <stdint.h>
 
 void vwf_init(void);
-void vwf_put_char(char c);
-void vwf_flush_buffer(void);
-void vwf_clear_screen(void);
+void vwf_putc(char c);
+void vwf_puts(const char* s);
+void vwf_set_cursor(uint8_t x, uint8_t y);
 
 #endif

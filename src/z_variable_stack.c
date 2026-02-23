@@ -80,9 +80,8 @@ void set_variable(uint8_t var, uint16_t value) {
 }
 
 void call_routine(uint16_t packed_addr, uint8_t num_args, uint16_t* args, uint8_t store_var) {
-    if (fp >= MAX_FRAMES - 1) return; // Stack Overflow
+    if (fp >= MAX_FRAMES - 1) return;
 
-    // In V3, packed addresses are multiplied by 2
     uint32_t target_addr = (uint32_t)packed_addr * 2;
     if (target_addr == 0) {
         set_variable(store_var, 0);
@@ -95,14 +94,13 @@ void call_routine(uint16_t packed_addr, uint8_t num_args, uint16_t* args, uint8_
     frame->store_var = store_var;
     frame->stack_base = sp;
 
-    // Read initial locals from the routine header
     uint8_t num_locals = z_read_byte(target_addr++);
     frame->num_locals = num_locals;
 
     for (uint8_t i = 0; i < num_locals; i++) {
         uint16_t default_val = z_read_word(target_addr);
         target_addr += 2;
-        // Use passed argument if available, otherwise use default
+        // Arguments take precedence over default values in the routine header
         frame->locals[i] = (i < num_args) ? args[i] : default_val;
     }
 

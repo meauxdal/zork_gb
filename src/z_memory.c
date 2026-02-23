@@ -3,21 +3,22 @@
  *
  * Banked ROM access + WRAM shadow for the Z-machine dynamic segment.
  *
- * The key insight for Game Boy banked ROM:
- *   SWITCH_ROM(n) maps bank n into the hardware window at 0x4000-0x7FFF.
- *   We can then read directly from that window using a volatile pointer.
- *   We must NOT go through a pointer table that lives in a different bank,
- *   because switching banks unmaps the table itself.
+ * For the init copy and all ROM reads, we use the zork_bankN_data arrays
+ * directly. GBDK's linker places them in the correct banks via #pragma bank,
+ * and SWITCH_ROM maps that bank into 0x4000-0x7FFF before we dereference.
+ * The arrays are declared extern so the compiler knows they exist, and
+ * SWITCH_ROM ensures the right bank is mapped when we index into them.
  *
- * Z-file layout in ROM banks (--start-bank 2):
- *   Bank 2: z-file bytes 0x0000..0x3FFF
- *   Bank 3: z-file bytes 0x4000..0x7FFF
- *   ... etc.
+ * This avoids the pointer-table-after-bank-switch hazard: we never store
+ * a pointer to banked data; we always switch first, then index.
  *
- * WRAM shadow:
- *   The first Z_DYNAMIC_SIZE bytes of the z-file are copied into z_wram[]
- *   at boot. All writes go here. Reads of dynamic addresses come from here.
- *   Reads of static addresses (>= Z_DYNAMIC_SIZE) go to banked ROM.
+ * Z-file bank layout (--start-bank 2):
+ *   Bank 2 = z-file bytes 0x0000..0x3FFF   (bank_index 0)
+ *   Bank 3 = z-file bytes 0x4000..0x7FFF   (bank_index 1)
+ *   Bank 4 = z-file bytes 0x8000..0xBFFF   (bank_index 2)
+ *   Bank 5 = z-file bytes 0xC000..0xFFFF   (bank_index 3)
+ *   Bank 6 = z-file bytes 0x10000..0x13FFF (bank_index 4)
+ *   Bank 7 = z-file bytes 0x14000..0x17FFF (bank_index 5)
  */
 
 #include <gb/gb.h>
@@ -25,26 +26,36 @@
 #include "z_memory.h"
 #include "zork_data.h"
 
-/* WRAM shadow for the writable dynamic segment */
+/* The dynamic segment shadow lives in WRAM */
 static uint8_t z_wram[Z_DYNAMIC_SIZE];
 
 /*
- * The Game Boy banked ROM window is always at 0x4000-0x7FFF.
- * After SWITCH_ROM(n), bank n's bytes are readable at that address.
- * We read through a volatile pointer so the compiler can't cache or
- * reorder the access across the bank switch.
+ * Read from banked ROM. We switch the bank, read, switch back.
+ * Using a switch statement so the compiler sees concrete array accesses
+ * rather than a pointer dereference after a bank switch — lcc handles
+ * this correctly because each case is a direct array index with the
+ * bank already mapped.
  */
-#define BANKED_WIN ((volatile uint8_t *)0x4000u)
-
 static uint8_t rom_read_byte(uint32_t address) {
     uint8_t  bank_index = (uint8_t)(address >> 14u);
     uint16_t offset     = (uint16_t)(address & 0x3FFFu);
+    uint8_t  val        = 0u;
 
     if (bank_index >= ZORK_DATA_NUM_BANKS) return 0u;
 
     SWITCH_ROM((uint8_t)(ZORK_DATA_BANK_START + bank_index));
-    uint8_t val = BANKED_WIN[offset];
-    SWITCH_ROM(1u); /* restore: our code lives in bank 1 */
+
+    switch (bank_index) {
+        case 0: val = zork_bank2_data[offset]; break;
+        case 1: val = zork_bank3_data[offset]; break;
+        case 2: val = zork_bank4_data[offset]; break;
+        case 3: val = zork_bank5_data[offset]; break;
+        case 4: val = zork_bank6_data[offset]; break;
+        case 5: val = zork_bank7_data[offset]; break;
+        default: break;
+    }
+
+    SWITCH_ROM(1u);
     return val;
 }
 

@@ -75,31 +75,81 @@ void execute_next_instruction(void) {
         case 0x14: set_variable(z_read_byte(z_machine_pc++), (int16_t)op1 + (int16_t)op2); break;
         case 0x15: set_variable(z_read_byte(z_machine_pc++), (int16_t)op1 - (int16_t)op2); break;
         }
+        return;
     }
-    else if (opcode >= 0xB0 && opcode <= 0xBF) {
+    if ((opcode & 0xF0) == 0xB0) {
         switch (opcode) {
-        case 0xB0: return_from_routine(1); break;
-        case 0xB1: return_from_routine(0); break;
-        case 0xB2:
-            decode_zstring(z_machine_pc);
-            while (!(z_read_word(z_machine_pc) & 0x8000)) z_machine_pc += 2;
-            z_machine_pc += 2;
-            break;
-        case 0xBA: update_status_bar(); break;
+
+        case 0xB0: /* RTRUE */
+            return_from_routine(1);
+            return;
+
+        case 0xB1: /* RFALSE */
+            return_from_routine(0);
+            return;
+
+        case 0xB2: /* PRINT */
+            z_machine_pc = decode_zstring(z_machine_pc);
+            return;
+
+        case 0xB3: /* PRINT_RET */
+            z_machine_pc = decode_zstring(z_machine_pc);
+            return_from_routine(1);
+            return;
+
+        case 0xBB: /* NEW_LINE */
+            vwf_put_char('\n');
+            return;
+
+        case 0xBC: /* SHOW_STATUS */
+            update_status_bar();
+            return;
+
+        case 0xBA: /* QUIT */
+            while (1) { wait_vbl_done(); }
+            return;
+
+        default:
+            return;
         }
     }
     else if (opcode >= 0xE0) {
         switch (opcode) {
-        case 0xE0: {
-            uint16_t addr = get_variable(z_read_byte(z_machine_pc++));
-            uint8_t store = z_read_byte(z_machine_pc++);
-            call_routine(addr, 0, 0, store);
-        } break;
+        case 0xE0: { /* CALL (VAR) */
+            uint8_t types = z_fetch_byte();
+
+            uint16_t ops[4];
+            uint8_t opcount = 0;
+
+            for (uint8_t i = 0; i < 4; i++) {
+                uint8_t type = (types >> (6 - 2 * i)) & 0x03;
+                if (type == 3) break; /* omitted */
+
+                if (type == 0) { /* large const */
+                    ops[opcount++] = z_fetch_word();
+                }
+                else if (type == 1) { /* small const */
+                    ops[opcount++] = z_fetch_byte();
+                }
+                else { /* variable */
+                    uint8_t var = z_fetch_byte();
+                    ops[opcount++] = z_read_variable(var);
+                }
+            }
+
+            uint8_t store_var = z_fetch_byte();
+
+            if (opcount == 0) return;
+
+            uint16_t routine = ops[0];
+            call_routine(routine, &ops[1], opcount - 1, store_var);
+            return;
+        }
         case 0xE4: {
             uint16_t t_buf = get_variable(z_read_byte(z_machine_pc++));
             uint16_t p_buf = get_variable(z_read_byte(z_machine_pc++));
             op_sread(t_buf, p_buf);
-        } break;
+            return;
         }
     }
 }

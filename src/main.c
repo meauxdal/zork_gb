@@ -16,7 +16,7 @@ void main(void) {
     // 1. Hardware & Display Initialization
     // Upload the fixed-width font to VRAM (Tiles 0-255)
     // Each tile is 16 bytes in 2bpp format.
-    set_bkg_data(0, 255, zork_font_2bpp);
+    set_bkg_data(0, 256, zork_font_2bpp);
 
     vwf_init();
     SHOW_BKG;

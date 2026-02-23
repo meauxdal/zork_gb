@@ -6,20 +6,33 @@
 /*
  * z_memory.h
  *
- * Z-Machine memory model for Game Boy.
+ * Z_DYNAMIC_SIZE must fit in WRAM alongside the call stack, eval stack,
+ * and other globals. GBDK gives us 8KB WRAM (0xC000-0xDFFF) with the
+ * hardware stack growing down from 0xDFFF.
  *
- * The Z-file is split across banked ROM (read-only). The dynamic segment
- * (addresses 0x0000 .. Z_DYNAMIC_SIZE-1) is also shadowed in WRAM so
- * writes work. Reads check the WRAM shadow first for dynamic addresses,
- * then fall through to banked ROM for everything else.
+ * Zork I writes to:
+ *   0x0000..0x0037 : header (flags we set)
+ *   0x02B4..0x0E5A : object table (~250 objects x 9 bytes)
+ *   0x2008..0x21EF : globals table (240 words)
  *
- * Zork I dynamic segment ends at 0x2E53 (~11.8 KB). We shadow the first
- * Z_DYNAMIC_SIZE bytes. Writes above that limit are silently dropped —
- * acceptable for now because Zork I doesn't write above the object/globals
- * area in practice during normal play.
+ * The globals table at 0x2008 is the furthest write. But fitting 0x2200
+ * bytes of shadow plus stack plus call frames exceeds 8KB. So we shadow
+ * only the header + object table region, and handle globals differently:
+ * globals are read/written via get_variable/set_variable which go through
+ * z_read_word/z_write_word — we just need those addresses to be writable.
+ *
+ * Practical split that fits in 8KB WRAM:
+ *   z_wram[0x1000]  = 4096 bytes  (header + object table, safely covers writes)
+ *   z_stack[128b]   + call_stack[~312b] + other globals ~= 512 bytes
+ *   Stack headroom  = 8192 - 4096 - 512 = 3584 bytes  ← plenty
+ *
+ * Globals (0x2008+) are above the shadow. z_write_byte silently drops them.
+ * We handle globals by keeping a separate small globals mirror.
  */
 
-#define Z_DYNAMIC_SIZE 0x1E00u   /* 7680 bytes — fits in 8 KB WRAM */
+#define Z_DYNAMIC_SIZE  0x1000u   /* 4096 bytes — header + object table */
+#define Z_GLOBALS_BASE  0x2008u   /* where Zork I's global table starts */
+#define Z_GLOBALS_COUNT 240u      /* 240 globals x 2 bytes = 480 bytes */
 
 void     z_mem_init(void);
 

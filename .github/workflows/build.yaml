@@ -1,0 +1,33 @@
+#### FILE: .github/workflows/build.yaml
+name: Build Zork-GB
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Build ROM
+        # Using a community GBDK container to ensure 'lcc' is available
+        uses: addnab/docker-run-action@v3
+        with:
+          image: ghcr.io/gbdk-2020/gbdk-2020:latest
+          options: -v ${{ github.workspace }}:/src
+          run: |
+            cd /src
+            make clean
+            make
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: zork-gb-rom
+          path: zork_gb.gb
+          

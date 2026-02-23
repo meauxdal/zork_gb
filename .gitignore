@@ -1,0 +1,13 @@
+#### FILE: .gitignore
+# Build Artifacts
+*.o
+*.gb
+*.map
+*.sym
+*.lst
+*.ihx
+*.noi
+
+# OS junk
+.DS_Store
+Thumbs.db

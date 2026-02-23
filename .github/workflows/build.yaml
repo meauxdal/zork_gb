@@ -14,16 +14,16 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      - name: Install GBDK-2020
+        run: |
+          wget https://github.com/gbdk-2020/gbdk-2020/releases/download/4.2.0/gbdk-linux64.tar.gz
+          tar -xzf gbdk-linux64.tar.gz
+          echo "$(pwd)/gbdk/bin" >> $GITHUB_PATH
+
       - name: Build ROM
-        uses: addnab/docker-run-action@v3
-        with:
-          # This image is confirmed public and compatible with GBDK-2020 projects
-          image: daid/gbdk-2020:latest
-          options: -v ${{ github.workspace }}:/src
-          run: |
-            cd /src
-            make clean
-            make
+        run: |
+          make clean
+          make GBDK_HOME=$(pwd)/gbdk
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4

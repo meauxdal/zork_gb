@@ -9,7 +9,7 @@ CFLAGS  = -Iinclude -Wa-l
 # -Wl-m: map file  -Wl-j: join identical sections
 # -Wl-yt0x1B: MBC5 (0x1B)  -Wl-yo4: 4 ROM banks min
 # -Wl-ya1: 1 SRAM bank (for future save support)
-LDFLAGS = -Wl-m -Wl-j -Wl-yt0x1B -Wl-yo4 -Wl-ya1
+LDFLAGS = -Wl-m -Wl-j -Wl-yt0x1B -Wl-yo16 -Wl-ya1
 
 SRCDIR  = src
 DATADIR = data

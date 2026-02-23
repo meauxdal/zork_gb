@@ -1,15 +1,16 @@
-#include <gb/gb.h>       // Resolves wait_vbl_done
+#include <gb/gb.h>       /* Required for wait_vbl_done() */
 #include <stdint.h>
 #include "z_dispatcher.h"
 #include "z_memory.h"
 #include "z_variable_stack.h"
 #include "z_vwf_render.h"
 #include "z_status_bar.h"
-#include "z_string_decoder.h" // Resolves decode_zstring
-#include "workboy.h"         // Ensure this declares workboy_get_char
+#include "z_string_decoder.h"
+#include "workboy.h"     /* Required for workboy_get_char() */
 
 uint32_t z_machine_pc;
 
+/* Internal branching logic to minimize external symbol dependencies */
 void handle_branch(uint8_t condition) {
     uint8_t b1 = z_read_byte(z_machine_pc++);
     uint8_t branch_on_true = (b1 & 0x80) >> 7;
@@ -31,17 +32,19 @@ void handle_branch(uint8_t condition) {
     }
 }
 
+/* Opcode E4: Synchronized with header to prevent parameter count errors */
 void op_sread(uint16_t text_buf, uint16_t parse_buf) {
-    // Mark parse_buf as referenced to silence Warning 85
     (void)parse_buf;
-
     uint8_t max_chars = z_read_byte(text_buf);
     uint8_t char_count = 0;
     char input_char;
 
     while (char_count < max_chars - 1) {
         input_char = workboy_get_char();
-        if (input_char == 0) { wait_vbl_done(); continue; }
+        if (input_char == 0) {
+            wait_vbl_done();
+            continue;
+        }
         if (input_char == 0x0D) break;
 
         if (input_char == 0x08 && char_count > 0) {
@@ -84,20 +87,16 @@ void execute_next_instruction(void) {
     }
     else if (opcode >= 0xE0) {
         switch (opcode) {
-        case 0xE0:
-        {
+        case 0xE0: {
             uint16_t addr = get_variable(z_read_byte(z_machine_pc++));
             uint8_t store = z_read_byte(z_machine_pc++);
             call_routine(addr, 0, 0, store);
-        }
-        break;
-        case 0xE4:
-        {
+        } break;
+        case 0xE4: {
             uint16_t t_buf = get_variable(z_read_byte(z_machine_pc++));
             uint16_t p_buf = get_variable(z_read_byte(z_machine_pc++));
             op_sread(t_buf, p_buf);
-        }
-        break;
+        } break;
         }
     }
 }

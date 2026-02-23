@@ -31,12 +31,12 @@ static uint8_t z_wram[Z_DYNAMIC_SIZE];
  * Banked ROM pointer table — populated by bin2banks.py / zork_data.h
  * ----------------------------------------------------------------------- */
 static const uint8_t * const z_banks[ZORK_DATA_NUM_BANKS] = {
-    zork_bank1_data,
     zork_bank2_data,
     zork_bank3_data,
     zork_bank4_data,
     zork_bank5_data,
     zork_bank6_data,
+    zork_bank7_data,
 };
 
 /* -----------------------------------------------------------------------

@@ -1,18 +1,21 @@
-#ifndef MEMORY_CORE_H
-#define MEMORY_CORE_H
+#### FILE: include/z_memory.h
+#ifndef Z_MEMORY_H
+#define Z_MEMORY_H
 
+#include <gb/gb.h>
 #include <stdint.h>
 
-#define DYNAMIC_MEM_SIZE 0x1000  // 4KB WRAM buffer
-#define ZORK_START_BANK  1       // .z3 data begins at ROM Bank 1
+#define DYNAMIC_MEM_SIZE 0x1000  // 4KB
+#define Z_ROM_BANK       1       // Zork .z3 sits in Bank 1
 
-extern uint32_t z_machine_pc;
+// Core Memory Functions
+void z_init_memory(void);
+uint8_t z_read_byte(uint16_t address);
+void z_write_byte(uint16_t address, uint8_t value);
+uint16_t z_read_word(uint16_t address);
 
-uint8_t  z_read_byte(uint32_t address);
-void     z_write_byte(uint32_t address, uint8_t value);
-uint16_t z_read_word(uint32_t address);
-void     z_write_word(uint32_t address, uint16_t value);
-uint8_t  z_fetch_byte(void);
-uint16_t z_fetch_word(void);
+// SRAM / Save Logic
+void z_save_game(void);
+void z_restore_game(void);
 
 #endif

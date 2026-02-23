@@ -1,64 +1,48 @@
-/*
- * memory_core.c
- * Purpose: MBC5 Bank Switching and Big-Endian Memory Access
- */
+#### FILE: src/memory_core.c
+#include "z_memory.h"
+#include <string.h>
 
-#include <gb/gb.h>
-#include <stdint.h>
-#include "memory_core.h"
+// The 4KB buffer for the "Dynamic" part of the Z-Machine
+uint8_t dynamic_ram[DYNAMIC_MEM_SIZE];
 
-// 4KB buffer for the Z-Machine's dynamic memory (writable)
-uint8_t  dynamic_memory_buffer[DYNAMIC_MEM_SIZE];
-uint32_t z_machine_pc = 0;
+void z_init_memory(void) {
+    // Copy the first 4KB from ROM Bank 1 into our working RAM
+    SWITCH_ROM_BANK(Z_ROM_BANK);
+    memcpy(dynamic_ram, (uint8_t *)0x4000, DYNAMIC_MEM_SIZE);
+}
 
-static uint8_t active_rom_bank = 0xFF;
-
-/* Reads a single byte from the Z-Machine address space */
-uint8_t z_read_byte(uint32_t address) {
+uint8_t z_read_byte(uint16_t address) {
     if (address < DYNAMIC_MEM_SIZE) {
-        return dynamic_memory_buffer[address];
+        return dynamic_ram[address];
+    } else {
+        // High/Static memory stays in ROM Bank 1
+        SWITCH_ROM_BANK(Z_ROM_BANK);
+        return *(uint8_t *)(0x4000 + address);
     }
-
-    // V3: ROM starts at bank 1 (0x4000). Calculate target bank based on address.
-    uint8_t target_bank = (uint8_t)(address >> 14) + ZORK_START_BANK;
-
-    if (active_rom_bank != target_bank) {
-        SWITCH_MBC5_BANK(target_bank);
-        active_rom_bank = target_bank;
-    }
-
-    // Access ROM at the 0x4000-0x7FFF window
-    return *(volatile uint8_t*)(0x4000 + (address & 0x3FFF));
 }
 
-/* Writes a single byte (only allowed within the dynamic memory buffer) */
-void z_write_byte(uint32_t address, uint8_t value) {
+void z_write_byte(uint16_t address, uint8_t value) {
     if (address < DYNAMIC_MEM_SIZE) {
-        dynamic_memory_buffer[address] = value;
+        dynamic_ram[address] = value;
     }
+    // Static memory (ROM) is read-only; writes are ignored
 }
 
-/* Reads a 16-bit word, correcting for Z-Machine Big-Endianness */
-uint16_t z_read_word(uint32_t address) {
-    uint8_t hi = z_read_byte(address);
-    uint8_t lo = z_read_byte(address + 1);
-    return ((uint16_t)hi << 8) | lo;
+uint16_t z_read_word(uint16_t address) {
+    return (uint16_t)((z_read_byte(address) << 8) | z_read_byte(address + 1));
 }
 
-/* Writes a 16-bit word in Big-Endian format */
-void z_write_word(uint32_t address, uint16_t value) {
-    z_write_byte(address, (uint8_t)(value >> 8));
-    z_write_byte(address + 1, (uint8_t)(value & 0xFF));
+// SRAM logic for MBC5 (Using 0xA000 - 0xBFFF)
+void z_save_game(void) {
+    ENABLE_RAM;
+    SWITCH_RAM_BANK(0);
+    memcpy((uint8_t *)0xA000, dynamic_ram, DYNAMIC_MEM_SIZE);
+    DISABLE_RAM;
 }
 
-/* Fetches the next byte from the Program Counter and increments it */
-uint8_t z_fetch_byte(void) {
-    return z_read_byte(z_machine_pc++);
-}
-
-/* Fetches the next 16-bit word from the Program Counter and increments it */
-uint16_t z_fetch_word(void) {
-    uint16_t val = z_read_word(z_machine_pc);
-    z_machine_pc += 2;
-    return val;
+void z_restore_game(void) {
+    ENABLE_RAM;
+    SWITCH_RAM_BANK(0);
+    memcpy(dynamic_ram, (uint8_t *)0xA000, DYNAMIC_MEM_SIZE);
+    DISABLE_RAM;
 }

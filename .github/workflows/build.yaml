@@ -1,5 +1,4 @@
-#### FILE: .github/workflows/build.yaml
-name: Build Zork-GB
+name: Build Zork GB ROM
 
 on:
   push:
@@ -10,29 +9,37 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout Code
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Install GBDK-2020
-        run: |
-          wget https://github.com/gbdk-2020/gbdk-2020/releases/download/4.2.0/gbdk-linux64.tar.gz
-          tar -xzf gbdk-linux64.tar.gz
+      - name: Cache GBDK
+        id: cache-gbdk
+        uses: actions/cache@v4
+        with:
+          path: gbdk/
+          key: ${{ runner.os }}-gbdk-2020
 
-     #### FILE: .github/workflows/build.yaml
+      - name: Install GBDK
+        if: steps.cache-gbdk.outputs.cache-hit != 'true'
+        run: |
+          wget https://github.com/gbdk-2020/gbdk-2020/releases/download/4.1.1/gbdk-linux64.tar.gz
+          tar -xzf gbdk-linux64.tar.gz
+          # GBDK usually extracts to a folder like 'gbdk', rename or move if necessary
+
       - name: Build ROM
         env:
           GBDKDIR: ${{ github.workspace }}/gbdk/
         run: |
           export PATH=$PATH:${{ github.workspace }}/gbdk/bin
-          # DIAGNOSTIC: List all files to find the missing headers
+          # Diagnostic: Ensure directory structure is as expected
           ls -R
           make clean
           make
-          
-      - name: Upload Artifact
+
+      - name: Upload ROM Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: zork-gb-rom
+          name: zork_gb_rom
           path: zork_gb.gb
-          

@@ -4,12 +4,16 @@
 #include <stdint.h>
 
 #define STACK_DEPTH 256
+#define MAX_CALL_DEPTH 32
+
+// Initialization
+void z_stack_init(void);
 
 // Variable Access
 uint16_t get_variable(uint8_t var);
 void set_variable(uint8_t var, uint16_t value);
 
-// Stack Operations
+// Evaluation Stack Operations
 void push_stack(uint16_t value);
 uint16_t pop_stack(void);
 

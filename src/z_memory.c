@@ -1,64 +1,67 @@
-#include <gb/gb.h>
-#include <gb/cgb.h>
-#include <stdint.h>
-#include <string.h>
 #include "z_memory.h"
-#include "zork_data.h"
+#include <gb/gb.h>
+#include <string.h>
 
-/* The 4KB buffer for the "Dynamic" (read/write) part of the Z-Machine.
-   Z-Machine V3 dynamic memory is everything below the static base pointer
-   stored at header offset 0x0E. In practice for Zork I it's about 0x2B4 bytes,
-   but we conservatively reserve the full DYNAMIC_MEM_SIZE (0x1000 = 4KB). */
-uint8_t dynamic_ram[DYNAMIC_MEM_SIZE];
+/**
+ * Z-Machine Memory Atom
+ * Total Story Size: ~85KB
+ * Dynamic Memory: 0x0000 to Static Memory Address (Header 0x0E)
+ * Static Memory: Follows Dynamic, stays in ROM.
+ */
 
-/* Map a Z-machine byte address to the ROM bank number and the byte offset
-   within the 0x4000-byte bank window. */
-static uint8_t z_addr_to_bank(uint16_t address) {
-    return (uint8_t)(ZORK_DATA_BANK_START + (address / ZORK_BANK_SIZE));
-}
-
-static uint16_t z_addr_to_offset(uint16_t address) {
-    return (uint16_t)(address % ZORK_BANK_SIZE);
-}
+ // We reserve 4KB for Dynamic RAM. Most V3 games use less than this for writable data.
+static uint8_t z_dynamic_ram[4096];
+static uint16_t static_memory_base;
 
 void z_init_memory(void) {
-    /* Copy the first DYNAMIC_MEM_SIZE bytes from bank 1 into RAM */
-    SWITCH_ROM_BANK(ZORK_DATA_BANK_START);
-    memcpy(dynamic_ram, (uint8_t *)0x4000, DYNAMIC_MEM_SIZE);
-}
+    // 1. Read the static memory base from the header (offset 0x0E)
+    // Initially, we must read this from ROM Bank 1 where the data is mapped
+    SWITCH_ROM_MBC1(1);
 
-uint8_t z_read_byte(uint16_t address) {
-    if (address < DYNAMIC_MEM_SIZE) {
-        return dynamic_ram[address];
+    // The header is at the very start of the story file data
+    // We assume the story file starts at 0x4000 (Bank 1)
+    uint8_t high = *(uint8_t*)(0x400E);
+    uint8_t low = *(uint8_t*)(0x400F);
+    static_memory_base = (uint16_t)(high << 8) | low;
+
+    // 2. Copy Dynamic RAM from ROM to our internal buffer
+    // This allows the engine to write to the header and global variables
+    for (uint16_t i = 0; i < 4096 && i < static_memory_base; i++) {
+        z_dynamic_ram[i] = *(uint8_t*)(0x4000 + i);
     }
-    /* Static/high memory: switch to the correct bank and read */
-    SWITCH_ROM_BANK(z_addr_to_bank(address));
-    return *(uint8_t *)(0x4000 + z_addr_to_offset(address));
 }
 
-void z_write_byte(uint16_t address, uint8_t value) {
-    if (address < DYNAMIC_MEM_SIZE) {
-        dynamic_ram[address] = value;
+uint8_t z_read_byte(uint32_t address) {
+    // If the address is within the Dynamic range, read from RAM
+    if (address < static_memory_base && address < 4096) {
+        return z_dynamic_ram[address];
     }
-    /* Writes to static/ROM are silently ignored */
+
+    // Otherwise, we must calculate which ROM bank the data lives in
+    // Each Game Boy bank is 16KB (16384 bytes)
+    // Story file is mapped starting at Bank 1
+    uint8_t bank = (uint8_t)(address / 16384) + 1;
+    uint16_t offset = (uint16_t)(address % 16384);
+
+    SWITCH_ROM_MBC1(bank);
+    return *(uint8_t*)(0x4000 + offset);
 }
 
-uint16_t z_read_word(uint16_t address) {
-    /* Note: Z-machine words are big-endian */
-    return (uint16_t)(((uint16_t)z_read_byte(address) << 8) | z_read_byte(address + 1));
+uint16_t z_read_word(uint32_t address) {
+    uint8_t h = z_read_byte(address);
+    uint8_t l = z_read_byte(address + 1);
+    return (uint16_t)((h << 8) | l);
 }
 
-/* SRAM save/restore using MBC5 external RAM */
-void z_save_game(void) {
-    ENABLE_RAM;
-    SWITCH_RAM_BANK(0);
-    memcpy((uint8_t *)0xA000, dynamic_ram, DYNAMIC_MEM_SIZE);
-    DISABLE_RAM;
+void z_write_byte(uint32_t address, uint8_t value) {
+    // The Z-machine is only allowed to write to Dynamic Memory
+    if (address < static_memory_base && address < 4096) {
+        z_dynamic_ram[address] = value;
+    }
+    // Writes to Static/High memory are ignored per Z-spec
 }
 
-void z_restore_game(void) {
-    ENABLE_RAM;
-    SWITCH_RAM_BANK(0);
-    memcpy(dynamic_ram, (uint8_t *)0xA000, DYNAMIC_MEM_SIZE);
-    DISABLE_RAM;
+void z_write_word(uint32_t address, uint16_t value) {
+    z_write_byte(address, (uint8_t)(value >> 8));
+    z_write_byte(address + 1, (uint8_t)(value & 0xFF));
 }

@@ -4,7 +4,8 @@ name: Build Zork-GB
 on:
   push:
     branches: [ main ]
-  pull_request: [ main ]
+  pull_request:
+    branches: [ main ]
 
 jobs:
   build:
@@ -17,13 +18,11 @@ jobs:
         run: |
           wget https://github.com/gbdk-2020/gbdk-2020/releases/download/4.2.0/gbdk-linux64.tar.gz
           tar -xzf gbdk-linux64.tar.gz
-          # GBDK is now in ${{ github.workspace }}/gbdk
 
       - name: Build ROM
         env:
           GBDKDIR: ${{ github.workspace }}/gbdk/
         run: |
-          # Add bin to path and execute make
           export PATH=$PATH:${{ github.workspace }}/gbdk/bin
           make clean
           make

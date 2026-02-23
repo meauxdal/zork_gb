@@ -1,20 +1,23 @@
 #### FILE: Makefile
-CC = lcc -Wa-l -Wl-m -Wl-j -Iinclude
+CC = lcc
+# MBC5 + RAM + BATTERY (0x1B)
+# 2 ROM Banks, 1 RAM Bank
+LCCFLAGS = -Wa-l -Wl-m -Wl-j -Iinclude -Wl-yt0x1B -Wl-yo2 -Wl-ya1
 
-LDFLAGS = -Wl-yt0x1B -Wl-yo8 -Wl-ya0
+SRCS = src/main.c src/memory_core.c src/z_dispatcher.c \
+       src/z_variable_stack.c src/z_string_decoder.c \
+       src/z_object_engine.c src/vwf_render.c
 
-# Path correction for new folder structure
-SRCS = $(wildcard src/*.c)
-OBJS = $(SRCS:.c=.o) zork_data.o
+OBJS = $(SRCS:.c=.o) data/zork_data.o
 
 all: zork_gb.gb
 
 zork_gb.gb: $(OBJS)
-	$(CC) $(LDFLAGS) -o $@ $(OBJS)
+	$(CC) $(LCCFLAGS) -o $@ $(OBJS)
 
-zork_data.o: data/zork1.z3
-	$(CC) -Wl-W -Wl-bo1 -c -o zork_data.o data/zork1.z3
+# This rule packs the raw .z3 file into a Game Boy object file in ROM Bank 1
+data/zork_data.o: data/zork1.z3
+	$(CC) -Wl-bo1 -c -o $@ data/zork1.z3
 
 clean:
-	rm -f src/*.o *.o *.gb *.map *.sym *.lst
-	
+	rm -f src/*.o data/*.o *.gb *.map *.sym *.lst

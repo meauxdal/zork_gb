@@ -6,7 +6,8 @@
 
 // External font arrays
 extern const uint8_t zork_font[256*8];
-extern const uint8_t zork_font_widths[256];
+extern uint8_t zork_font_widths[256];
+extern void zork_font_init(void);
 
 // Cursor position for rendering
 static uint8_t cursor_x;
@@ -15,6 +16,7 @@ static uint8_t cursor_y;
 void vwf_init(void) {
     cursor_x = 0;
     cursor_y = 0;
+    zork_font_init();                    /* populate the width table at runtime */
     // Load font tiles into background tiles (assume bank 0)
     set_bkg_data(0, 256, zork_font);
 }

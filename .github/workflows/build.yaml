@@ -15,10 +15,10 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Build ROM
-        # Using a community GBDK container to ensure 'lcc' is available
         uses: addnab/docker-run-action@v3
         with:
-          image: ghcr.io/gbdk-2020/gbdk-2020:latest
+          # Using the verified z98/gbdk-2020 image which is generally more accessible
+          image: z98/gbdk-2020:latest
           options: -v ${{ github.workspace }}:/src
           run: |
             cd /src

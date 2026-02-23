@@ -32,14 +32,13 @@ void z_init_memory(void) {
 }
 
 uint8_t z_read_byte(uint32_t address) {
-    // If the address is within the Dynamic range, read from RAM
-    if (address < static_memory_base && address < 4096) {
+    if (address < 4096) {
+        // Dynamic RAM access
+        extern uint8_t z_dynamic_ram[];
         return z_dynamic_ram[address];
     }
 
-    // Otherwise, we must calculate which ROM bank the data lives in
-    // Each Game Boy bank is 16KB (16384 bytes)
-    // Story file is mapped starting at Bank 1
+    // MBC1 Banking logic
     uint8_t bank = (uint8_t)(address / 16384) + 1;
     uint16_t offset = (uint16_t)(address % 16384);
 
@@ -47,18 +46,17 @@ uint8_t z_read_byte(uint32_t address) {
     return *(uint8_t*)(0x4000 + offset);
 }
 
+void z_write_byte(uint32_t address, uint8_t value) {
+    if (address < 4096) {
+        extern uint8_t z_dynamic_ram[];
+        z_dynamic_ram[address] = value;
+    }
+}
+
 uint16_t z_read_word(uint32_t address) {
     uint8_t h = z_read_byte(address);
     uint8_t l = z_read_byte(address + 1);
     return (uint16_t)((h << 8) | l);
-}
-
-void z_write_byte(uint32_t address, uint8_t value) {
-    // The Z-machine is only allowed to write to Dynamic Memory
-    if (address < static_memory_base && address < 4096) {
-        z_dynamic_ram[address] = value;
-    }
-    // Writes to Static/High memory are ignored per Z-spec
 }
 
 void z_write_word(uint32_t address, uint16_t value) {

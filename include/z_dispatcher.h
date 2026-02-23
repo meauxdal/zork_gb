@@ -3,11 +3,9 @@
 
 #include <stdint.h>
 
-// The Program Counter (Global)
-extern uint16_t z_machine_pc;
+extern uint32_t z_machine_pc;
 
-// Core Dispatcher Functions
 void z_dispatcher_init(void);
-void z_execute_cycle(void);
+void execute_next_instruction(void);
 
 #endif

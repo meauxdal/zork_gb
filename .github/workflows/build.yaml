@@ -19,11 +19,14 @@ jobs:
           wget https://github.com/gbdk-2020/gbdk-2020/releases/download/4.2.0/gbdk-linux64.tar.gz
           tar -xzf gbdk-linux64.tar.gz
 
+     #### FILE: .github/workflows/build.yaml
       - name: Build ROM
         env:
           GBDKDIR: ${{ github.workspace }}/gbdk/
         run: |
           export PATH=$PATH:${{ github.workspace }}/gbdk/bin
+          # DIAGNOSTIC: List all files to find the missing headers
+          ls -R
           make clean
           make
           

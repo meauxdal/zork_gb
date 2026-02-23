@@ -1,4 +1,4 @@
-#### FILE: src/memory_core.c
+#include <gb/gb.h>
 #include "z_memory.h"
 #include <string.h>
 

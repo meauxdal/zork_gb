@@ -24,7 +24,7 @@ void main(void) {
 
     // 4. The Infinite Execution Loop
     while (1) {
-        execute_next_instruction();
+        z_execute_cycle();
 
         // Safety: If the Z-Machine hits a HALT or error, 
         // we yield to the hardware to prevent battery drain.

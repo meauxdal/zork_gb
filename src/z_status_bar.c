@@ -4,11 +4,11 @@
  */
 
 #include <stdint.h>
-#include "memory_core.h"
+#include "z_memory.h"
 #include "z_variable_stack.h"
 #include "z_object_engine.h"
 #include "z_string_decoder.h"
-#include "vwf_render.h"
+#include "z_vwf_render.h"
 
 void update_status_bar(void) {
     // V3 Convention:

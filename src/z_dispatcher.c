@@ -35,9 +35,7 @@ void handle_store(uint16_t value) {
     set_variable(variable, value);
 }
 
-void execute_next_instruction(void) {
-    uint8_t opcode = z_fetch_byte();
-    uint16_t operands[4];
+void z_execute_cycle(void)
     
     // --- 2OP Opcodes (Long Form) ---
     if (opcode < 0x80) {

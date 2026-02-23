@@ -7,7 +7,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include "workboy.h"
-#include "vwf_render.h"
+#include "z_vwf_render.h"
 
 #define BUFFER_SIZE 128
 static uint8_t input_buffer[BUFFER_SIZE];

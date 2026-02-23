@@ -1,4 +1,3 @@
-#### FILE: include/z_memory.h
 #ifndef Z_MEMORY_H
 #define Z_MEMORY_H
 
@@ -13,6 +12,7 @@ void z_init_memory(void);
 uint8_t z_read_byte(uint16_t address);
 void z_write_byte(uint16_t address, uint8_t value);
 uint16_t z_read_word(uint16_t address);
+uint8_t z_fetch_byte(void);
 
 // SRAM / Save Logic
 void z_save_game(void);

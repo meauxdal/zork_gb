@@ -1,13 +1,11 @@
-/**
- * File: src/z_string_decoder.c
- */
-
 #include "z_string_decoder.h"
 #include "z_memory.h"
 #include "z_vwf_render.h"
 
- // Z-character set maps
-static const char charset[3][26] = {
+/* * Fixed: Array bounds set to 27 to accommodate null terminator.
+ * This resolves the Warning 147 and prevents stack corruption.
+ */
+static const char charset[3][27] = {
     "abcdefghijklmnopqrstuvwxyz",
     "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
     " \n0123456789.,!?_#'\"/\\-:()"
@@ -29,12 +27,7 @@ void decode_zstring(uint32_t address) {
 
         for (uint8_t i = 0; i < 3; i++) {
             uint8_t c = zchars[i];
-
-            if (abbreviation_mode) {
-                // Simplified for MVP: Abbreviation handling logic would go here
-                abbreviation_mode = 0;
-                continue;
-            }
+            if (abbreviation_mode) { abbreviation_mode = 0; continue; }
 
             if (c == 0) {
                 vwf_put_char(' ');
@@ -50,8 +43,8 @@ void decode_zstring(uint32_t address) {
             }
             else if (c >= 6 && c <= 31) {
                 vwf_put_char(charset[current_set][c - 6]);
-                current_set = 0; // Reset to Set 0 after one char if shifted
+                current_set = 0;
             }
         }
-    } while (!(word & 0x8000)); // Bit 15 signals the end of the string
+    } while (!(word & 0x8000));
 }

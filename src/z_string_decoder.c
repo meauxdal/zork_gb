@@ -2,7 +2,7 @@
 #include "z_string_decoder.h"
 #include "z_memory.h"
 #include "z_dispatcher.h"
-#include "vwf_render.h"
+#include "z_vwf_render.h"
 
 static const char alphabet[] =
 "abcdefghijklmnopqrstuvwxyz" // A0

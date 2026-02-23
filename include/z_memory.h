@@ -4,8 +4,16 @@
 #include <gb/gb.h>
 #include <stdint.h>
 
-#define DYNAMIC_MEM_SIZE 0x1000  // 4KB
-#define Z_ROM_BANK       1       // Zork .z3 sits in Bank 1
+#ifndef SWITCH_ROM_BANK
+#define SWITCH_ROM_BANK(b) SWITCH_ROM_MBC5(b)
+#endif
+
+#ifndef SWITCH_RAM_BANK
+#define SWITCH_RAM_BANK(b) SWITCH_RAM_MBC5(b)
+#endif
+
+#define DYNAMIC_MEM_SIZE 0x1000
+#define Z_ROM_BANK       1
 
 // Core Memory Functions
 void z_init_memory(void);

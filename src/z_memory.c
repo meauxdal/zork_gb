@@ -48,7 +48,7 @@ static uint8_t rom_read_byte(uint32_t address) {
     uint16_t offset = (uint16_t)(address & 0x3FFFu);
     SWITCH_ROM(bank_index + ZORK_DATA_BANK_START);
     uint8_t val = z_banks[bank_index][offset];
-    SWITCH_ROM(ZORK_DATA_BANK_START); /* restore bank 1 as default */
+    SWITCH_ROM(1); /* restore to bank 1 where our code lives */
     return val;
 }
 

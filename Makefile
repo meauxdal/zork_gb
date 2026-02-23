@@ -18,6 +18,7 @@ TOOLDIR = tools
 DATA_BIN = $(DATADIR)/zork1.z3
 DATA_OUT = $(DATADIR)/zork_data
 DATA_HDR = include/zork_data.h
+DATA_BANK_START = 2
 
 SRCFILES = \
     $(SRCDIR)/main.c           \
@@ -33,12 +34,12 @@ SRCFILES = \
 
 # Bank object files — count must match ZORK_DATA_NUM_BANKS in zork_data.h
 BANK_OBJS = \
-    $(DATA_OUT)/zork_bank1.o  \
     $(DATA_OUT)/zork_bank2.o  \
     $(DATA_OUT)/zork_bank3.o  \
     $(DATA_OUT)/zork_bank4.o  \
     $(DATA_OUT)/zork_bank5.o  \
-    $(DATA_OUT)/zork_bank6.o
+    $(DATA_OUT)/zork_bank6.o  \
+    $(DATA_OUT)/zork_bank7.o
 
 OBJFILES = $(patsubst %.c,%.o,$(SRCFILES)) $(BANK_OBJS)
 
@@ -48,7 +49,7 @@ all: zork_gb.gb
 # Generate bank C files + header from z3 binary
 $(DATA_HDR): $(DATA_BIN)
 	@mkdir -p $(DATA_OUT)
-	python3 $(TOOLDIR)/bin2banks.py $(DATA_BIN) $(DATA_OUT) $(DATA_HDR)
+	python3 $(TOOLDIR)/bin2banks.py $(DATA_BIN) $(DATA_OUT) $(DATA_HDR) --start-bank $(DATA_BANK_START)
 
 # Compile source files
 $(SRCDIR)/%.o: $(SRCDIR)/%.c $(DATA_HDR)

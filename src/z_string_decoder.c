@@ -30,7 +30,7 @@
 #include "z_render.h"
 
 /* V3 alphabet tables, indexed [set][zchar - 6] */
-static const char z_alpha[3][26] = {
+static const char z_alpha[3][27] = {
     /* A0 */ "abcdefghijklmnopqrstuvwxyz",
     /* A1 */ "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
     /* A2 */ " \n0123456789.,!?_#'\"/\\-:()"

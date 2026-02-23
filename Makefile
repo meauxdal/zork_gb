@@ -38,11 +38,7 @@ BANK_OBJS = \
     $(DATA_OUT)/zork_bank3.o  \
     $(DATA_OUT)/zork_bank4.o  \
     $(DATA_OUT)/zork_bank5.o  \
-    $(DATA_OUT)/zork_bank6.o  \
-    $(DATA_OUT)/zork_bank7.o  \
-    $(DATA_OUT)/zork_bank8.o  \
-    $(DATA_OUT)/zork_bank9.o  \
-    $(DATA_OUT)/zork_bank10.o
+    $(DATA_OUT)/zork_bank6.o
 
 OBJFILES = $(patsubst %.c,%.o,$(SRCFILES)) $(BANK_OBJS)
 

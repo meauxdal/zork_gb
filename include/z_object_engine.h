@@ -3,22 +3,20 @@
 
 #include <stdint.h>
 
-// Z-Machine V3 Object Structure:
-// 31 bytes per object:
-// - Attributes: 4 bytes (32 bits)
-// - Parent: 1 byte
-// - Sibling: 1 byte
-// - Child: 1 byte
-// - Property Pointer: 2 bytes
+/**
+ * Z-Machine Object Engine Prototypes
+ * Standardized for V3 (Zork I).
+ */
 
 uint16_t get_object_address(uint8_t obj_id);
-uint8_t  get_object_parent(uint8_t obj_id);
-uint8_t  get_object_sibling(uint8_t obj_id);
-uint8_t  get_object_child(uint8_t obj_id);
-uint16_t get_object_property_table(uint8_t obj_id);  /* returns address of property table for obj */
+void get_object_name(uint8_t obj_id);
 
-void     insert_object(uint8_t obj_id, uint8_t destination_id);
-uint8_t  get_object_attr(uint8_t obj_id, uint8_t attr_id);
-void     set_object_attr(uint8_t obj_id, uint8_t attr_id, uint8_t value);
+uint8_t get_parent(uint8_t obj_id);
+uint8_t get_sibling(uint8_t obj_id);
+uint8_t get_child(uint8_t obj_id);
+
+void set_parent(uint8_t obj_id, uint8_t new_parent);
+void set_sibling(uint8_t obj_id, uint8_t new_sibling);
+void set_child(uint8_t obj_id, uint8_t new_child);
 
 #endif

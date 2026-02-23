@@ -1,4 +1,4 @@
-#include <gb/gb.h>       /* Required for wait_vbl_done() */
+#include <gb/gb.h>
 #include <stdint.h>
 #include "z_dispatcher.h"
 #include "z_memory.h"
@@ -6,11 +6,15 @@
 #include "z_vwf_render.h"
 #include "z_status_bar.h"
 #include "z_string_decoder.h"
-#include "workboy.h"     /* Required for workboy_get_char() */
+#include "workboy.h"
 
 uint32_t z_machine_pc;
 
-/* Internal branching logic to minimize external symbol dependencies */
+void z_dispatcher_init(void) {
+    /* The Z-Machine Version 3 start PC is stored as a 16-bit word at header offset 0x06 */
+    z_machine_pc = (uint32_t)z_read_word(0x06);
+}
+
 void handle_branch(uint8_t condition) {
     uint8_t b1 = z_read_byte(z_machine_pc++);
     uint8_t branch_on_true = (b1 & 0x80) >> 7;
@@ -32,7 +36,6 @@ void handle_branch(uint8_t condition) {
     }
 }
 
-/* Opcode E4: Synchronized with header to prevent parameter count errors */
 void op_sread(uint16_t text_buf, uint16_t parse_buf) {
     (void)parse_buf;
     uint8_t max_chars = z_read_byte(text_buf);

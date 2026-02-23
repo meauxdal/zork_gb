@@ -1,8 +1,17 @@
-CC = lcc
-CFLAGS = -Iinclude
-LDFLAGS = -Wa-l -Wl-m -Wl-j -Wl-yt0x1B -Wl-yo2 -Wl-ya1
+# Target ROM Name
+TARGET = zork_gb.gb
 
-# List of all object files
+# Toolchain
+CC = lcc
+
+# Compiler and Linker Flags
+# -Wl-yo4: Sets ROM size to 4 banks (64KB) to accommodate Zork data
+# -Wl-yt0x1B: MBC5+RAM+BATTERY
+# -Wl-ya1: 1 RAM Bank
+CFLAGS = -Iinclude
+LDFLAGS = -Wa-l -Wl-m -Wl-j -Wl-yt0x1B -Wl-yo4 -Wl-ya1
+
+# Object Files
 OBJS = src/main.o \
        src/z_memory.o \
        src/z_dispatcher.o \
@@ -14,25 +23,27 @@ OBJS = src/main.o \
        src/workboy.o \
        src/z_status_bar.o
 
-# Default target
-all: zork_gb.gb
+# Default target for GitHub Actions
+all: $(TARGET)
 
-# Link the final Game Boy ROM
-zork_gb.gb: $(OBJS) data/zork_data.o
-	$(CC) $(LDFLAGS) -o zork_gb.gb $(OBJS) data/zork_data.o
+# Link the final ROM
+# We explicitly include data/zork_data.o in the link stage
+$(TARGET): $(OBJS) data/zork_data.o
+	$(CC) $(LDFLAGS) -o $(TARGET) $(OBJS) data/zork_data.o
 
-# Compile C files to object files
+# Compile C Source Files
 src/%.o: src/%.c
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-# DATA HANDLING: Wrap the Z3 binary in an assembly file to export symbols
+# Generate the Assembly Bridge for the .z3 story file
+# This creates the _zork_data symbol and places it in Bank 2
 data/zork_data.o: data/zork1.z3
-	@echo ".area _CODE_1" > data/zork_data.s
+	@echo ".area _CODE_2" > data/zork_data.s
 	@echo ".globl _zork_data" >> data/zork_data.s
 	@echo "_zork_data:" >> data/zork_data.s
 	@echo ".incbin \"data/zork1.z3\"" >> data/zork_data.s
 	$(CC) -c -o data/zork_data.o data/zork_data.s
 
-# Cleanup
+# Cleanup rule
 clean:
 	rm -f src/*.o data/*.o data/*.s *.gb *.map *.sym *.lst

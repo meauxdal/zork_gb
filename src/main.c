@@ -59,7 +59,5 @@ void main(void) {
     /* 8. Execute */
     while (1) {
         execute_next_instruction();
-        /* Yield once per instruction to keep the display alive */
-        wait_vbl_done();
     }
 }

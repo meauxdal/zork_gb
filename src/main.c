@@ -46,15 +46,19 @@ void main(void) {
 
     /*
      * 7. Header flags (byte 0x01):
-     *    Bit 4 = status bar available
+     *    Bit 4 = status bar available (0=yes, 1=no in V3)
      *    Bit 5 = screen-splitting not available (we don't implement it)
      *    Bit 6 = variable-pitch font is default (we use fixed, so clear it)
      */
     uint8_t flags = z_read_byte(0x01u);
-    flags |=  0x10u; /* set   bit 4: status line available */
+    flags &= ~0x10u; /* clear bit 4: status line IS available */
     flags &= ~0x20u; /* clear bit 5: no split */
     flags &= ~0x40u; /* clear bit 6: fixed-pitch */
     z_write_byte(0x01u, flags);
+
+    /* 7a. Screen dimensions (V3 spec §11.1.2) */
+    z_write_byte(0x20u, 18u); /* Height in rows */
+    z_write_byte(0x21u, 20u); /* Width in chars */
 
     /* 8. Execute */
     while (1) {

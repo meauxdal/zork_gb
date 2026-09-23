@@ -761,7 +761,7 @@ void execute_next_instruction(void) {
         case 0xE6: /* PRINT_NUM */
             if (nops >= 1u) {
                 /* Print signed decimal — hand-roll to avoid printf */
-                int16_t n = (int16_t)ops[0];
+                int32_t n = (int16_t)ops[0];
                 char buf[7]; /* -32768\0 */
                 uint8_t idx = 6u;
                 buf[idx] = '\0';

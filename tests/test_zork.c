@@ -314,6 +314,68 @@ void test_save_restore(void) {
     printf("  Save and restore tests passed!\n");
 }
 
+void test_print_num(void) {
+    printf("[TEST] Testing PRINT_NUM (0xE6) opcode...\n");
+    memset(mock_vram, 0, sizeof(mock_vram));
+    z_render_init();
+
+    /* Test 1: PRINT_NUM -32768 (0x8000)
+     * Opcode sequence: 0xE6 0x3F 0x80 0x00
+     * 0xE6 = PRINT_NUM
+     * 0x3F = operand types: large const (00), omitted (11), omitted (11), omitted (11) -> 0x3F
+     * 0x80 0x00 = large const 0x8000 (-32768)
+     */
+    uint32_t code_addr = 0x0400;
+    z_write_byte(code_addr, 0xE6);
+    z_write_byte(code_addr + 1, 0x3F);
+    z_write_word(code_addr + 2, 0x8000);
+
+    z_machine_pc = code_addr;
+    execute_next_instruction();
+
+    /* Verify output on line 1 in mock_vram */
+    char buf[20];
+    for (int i = 0; i < 6; i++) {
+        buf[i] = (char)mock_vram[1][i];
+    }
+    buf[6] = '\0';
+    assert(strcmp(buf, "-32768") == 0);
+
+    /* Test 2: PRINT_NUM 0
+     * Opcode sequence: 0xE6 0x3F 0x00 0x00
+     */
+    z_render_init();
+    z_write_byte(code_addr, 0xE6);
+    z_write_byte(code_addr + 1, 0x3F);
+    z_write_word(code_addr + 2, 0x0000);
+
+    z_machine_pc = code_addr;
+    execute_next_instruction();
+
+    buf[0] = (char)mock_vram[1][0];
+    buf[1] = '\0';
+    assert(strcmp(buf, "0") == 0);
+
+    /* Test 3: PRINT_NUM 12345
+     * Opcode sequence: 0xE6 0x3F 0x30 0x39
+     */
+    z_render_init();
+    z_write_byte(code_addr, 0xE6);
+    z_write_byte(code_addr + 1, 0x3F);
+    z_write_word(code_addr + 2, 12345);
+
+    z_machine_pc = code_addr;
+    execute_next_instruction();
+
+    for (int i = 0; i < 5; i++) {
+        buf[i] = (char)mock_vram[1][i];
+    }
+    buf[5] = '\0';
+    assert(strcmp(buf, "12345") == 0);
+
+    printf("  PRINT_NUM tests passed!\n");
+}
+
 int main(void) {
     printf("Starting Zork GB unit tests...\n");
 
@@ -332,6 +394,7 @@ int main(void) {
     test_status_bar();
     test_2op_var_form_and_array_ops();
     test_save_restore();
+    test_print_num();
 
     printf("\nAll unit tests completed successfully!\n");
     return 0;

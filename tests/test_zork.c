@@ -130,6 +130,7 @@ uint8_t z_restore_state(void) {
 #include "../src/z_status_bar.c"
 #include "../src/z_object_engine.c"
 #include "../src/z_string_decoder.c"
+#include "../src/zork_font.c"
 
 /* Workboy implementation */
 #include "../src/workboy.c"
@@ -404,6 +405,22 @@ void test_print_num(void) {
     printf("  PRINT_NUM tests passed!\n");
 }
 
+void test_font_single_pixel_width(void) {
+    printf("[TEST] Testing font single-pixel line width constraints...\n");
+    for (int c = 0x20; c <= 0x7E; c++) {
+        const unsigned char *glyph = &zork_font_2bpp[c * 16];
+        for (int r = 0; r < 7; r++) {
+            uint8_t row1 = glyph[r * 2];
+            uint8_t row2 = glyph[(r + 1) * 2];
+            uint8_t adj1 = row1 & (row1 >> 1);
+            uint8_t adj2 = row2 & (row2 >> 1);
+            /* Check no vertical stem has 2px width across consecutive rows */
+            assert((adj1 & adj2) == 0);
+        }
+    }
+    printf("  Font single-pixel line width tests passed!\n");
+}
+
 int main(void) {
     printf("Starting Zork GB unit tests...\n");
 
@@ -423,6 +440,7 @@ int main(void) {
     test_2op_var_form_and_array_ops();
     test_save_restore();
     test_print_num();
+    test_font_single_pixel_width();
 
     /* Test serial noise handling and debouncing in workboy_get_char */
     printf("[TEST] Testing Workboy serial link noise handling...\n");

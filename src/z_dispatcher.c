@@ -88,17 +88,165 @@ static void handle_branch(uint8_t condition) {
 }
 
 /* -----------------------------------------------------------------------
+ * Dictionary tokenization (lexical analysis) for sread / parse
+ * ----------------------------------------------------------------------- */
+
+static uint8_t char_to_zchar(char c, uint8_t *out) {
+    if (c >= 'a' && c <= 'z') {
+        out[0] = (uint8_t)(c - 'a' + 6);
+        return 1u;
+    }
+    if (c >= 'A' && c <= 'Z') {
+        out[0] = 4u; /* shift to A1 */
+        out[1] = (uint8_t)(c - 'A' + 6);
+        return 2u;
+    }
+    if (c >= '0' && c <= '9') {
+        out[0] = 5u; /* shift to A2 */
+        out[1] = (uint8_t)(c - '0' + 8);
+        return 2u;
+    }
+    /* Punctuation / special characters in A2 */
+    static const char a2_chars[] = " \n0123456789.,!?_#'\"/\\-:()";
+    uint8_t idx;
+    for (idx = 0u; idx < 25u; idx++) {
+        if (a2_chars[idx] == c) {
+            out[0] = 5u; /* shift to A2 */
+            out[1] = (uint8_t)(idx + 6u);
+            return 2u;
+        }
+    }
+    /* Unknown char -> pad value 5 */
+    out[0] = 5u;
+    out[1] = 5u;
+    return 2u;
+}
+
+static uint16_t search_dictionary(uint16_t dict_addr, uint16_t w1, uint16_t w2) {
+    uint8_t num_sep = z_read_byte(dict_addr);
+    uint8_t entry_len = z_read_byte(dict_addr + 1u + num_sep);
+    uint16_t num_entries = z_read_word(dict_addr + 2u + num_sep);
+    uint16_t entries_start = dict_addr + 4u + num_sep;
+
+    int16_t low = 0;
+    int16_t high = (int16_t)num_entries - 1;
+    uint32_t target_key = ((uint32_t)w1 << 16) | w2;
+
+    while (low <= high) {
+        int16_t mid = (low + high) / 2;
+        uint16_t eaddr = entries_start + (uint16_t)mid * entry_len;
+        uint16_t ew1 = z_read_word(eaddr);
+        uint16_t ew2 = z_read_word(eaddr + 2u);
+        uint32_t ekey = ((uint32_t)ew1 << 16) | ew2;
+
+        if (ekey == target_key) return eaddr;
+        if (ekey < target_key) low = mid + 1;
+        else high = mid - 1;
+    }
+    return 0u;
+}
+
+void z_tokenize(uint16_t text_buf, uint16_t parse_buf) {
+    if (parse_buf == 0u) return;
+
+    uint16_t dict_addr = z_read_word(0x08u);
+    if (dict_addr == 0u) return;
+
+    uint8_t num_sep = z_read_byte(dict_addr);
+    uint8_t max_words = z_read_byte(parse_buf);
+    uint8_t tok_count = 0u;
+    uint16_t ptr = 1u; /* 1-based index in text_buf */
+
+    while (tok_count < max_words) {
+        /* Skip leading spaces */
+        char c = (char)z_read_byte(text_buf + ptr);
+        if (c == '\0') break;
+
+        if (c == ' ') {
+            ptr++;
+            continue;
+        }
+
+        /* Check if c is a separator */
+        uint8_t is_sep = 0u;
+        uint8_t i;
+        for (i = 0u; i < num_sep; i++) {
+            if ((char)z_read_byte(dict_addr + 1u + i) == c) {
+                is_sep = 1u;
+                break;
+            }
+        }
+
+        uint16_t word_start = ptr;
+        uint8_t word_len = 0u;
+
+        if (is_sep) {
+            word_len = 1u;
+            ptr++;
+        } else {
+            /* Read until space, separator, or null */
+            while (1) {
+                char ch = (char)z_read_byte(text_buf + ptr);
+                if (ch == '\0' || ch == ' ') break;
+
+                uint8_t sep = 0u;
+                for (i = 0u; i < num_sep; i++) {
+                    if ((char)z_read_byte(dict_addr + 1u + i) == ch) {
+                        sep = 1u;
+                        break;
+                    }
+                }
+                if (sep) break;
+
+                word_len++;
+                ptr++;
+            }
+        }
+
+        if (word_len == 0u) continue;
+
+        /* Encode up to 6 Z-chars */
+        uint8_t zchars[12]; /* max possible from 6 chars * 2 */
+        uint8_t zcount = 0u;
+        for (i = 0u; i < word_len && zcount < 6u; i++) {
+            char ch = (char)z_read_byte(text_buf + word_start + i);
+            uint8_t tmp[2];
+            uint8_t n = char_to_zchar(ch, tmp);
+            if (zcount < 6u) zchars[zcount++] = tmp[0];
+            if (n > 1u && zcount < 6u) zchars[zcount++] = tmp[1];
+        }
+        while (zcount < 6u) {
+            zchars[zcount++] = 5u; /* pad with 5 */
+        }
+
+        uint16_t w1 = ((uint16_t)zchars[0] << 10) | ((uint16_t)zchars[1] << 5) | (uint16_t)zchars[2];
+        uint16_t w2 = 0x8000u | ((uint16_t)zchars[3] << 10) | ((uint16_t)zchars[4] << 5) | (uint16_t)zchars[5];
+
+        uint16_t match_addr = search_dictionary(dict_addr, w1, w2);
+
+        /* Write to parse_buf: 4 bytes per word entry starting at parse_buf + 2 */
+        uint16_t entry_addr = parse_buf + 2u + (uint16_t)tok_count * 4u;
+        z_write_word(entry_addr, match_addr);
+        z_write_byte(entry_addr + 2u, word_len);
+        z_write_byte(entry_addr + 3u, (uint8_t)word_start);
+
+        tok_count++;
+    }
+
+    /* Store total number of parsed words at parse_buf + 1 */
+    z_write_byte(parse_buf + 1u, tok_count);
+}
+
+/* -----------------------------------------------------------------------
  * sread (opcode 0xE4) — blocking input from Workboy
  *
  * text_buf layout: [max_chars][char0][char1]...[0x00 terminator]
- * parse_buf: lexical analysis — we skip it for now (no dictionary lookup).
+ * parse_buf: lexical analysis
  * ----------------------------------------------------------------------- */
 static void op_sread(uint16_t text_buf, uint16_t parse_buf) {
     uint8_t max_chars = z_read_byte(text_buf);
     uint8_t count     = 0;
     char    c;
-
-    (void)parse_buf; /* lexical analysis deferred */
 
     while (count < max_chars - 1u) {
         c = workboy_get_char();
@@ -122,6 +270,10 @@ static void op_sread(uint16_t text_buf, uint16_t parse_buf) {
         count++;
     }
     z_write_byte(text_buf + 1u + count, 0u);
+
+    if (parse_buf) {
+        z_tokenize(text_buf, parse_buf);
+    }
 }
 
 /* -----------------------------------------------------------------------
@@ -200,16 +352,28 @@ void execute_next_instruction(void) {
         case 0x04: /* DEC_CHK: decrement var, branch if < op2 */
             var = (uint8_t)op1;
             {
-                int16_t v = (int16_t)get_variable(var) - 1;
-                set_variable(var, (uint16_t)v);
+                int16_t v;
+                if (var == 0u) {
+                    v = (int16_t)pop_stack() - 1;
+                    push_stack((uint16_t)v);
+                } else {
+                    v = (int16_t)get_variable(var) - 1;
+                    set_variable(var, (uint16_t)v);
+                }
                 handle_branch(v < (int16_t)op2);
             }
             break;
         case 0x05: /* INC_CHK: increment var, branch if > op2 */
             var = (uint8_t)op1;
             {
-                int16_t v = (int16_t)get_variable(var) + 1;
-                set_variable(var, (uint16_t)v);
+                int16_t v;
+                if (var == 0u) {
+                    v = (int16_t)pop_stack() + 1;
+                    push_stack((uint16_t)v);
+                } else {
+                    v = (int16_t)get_variable(var) + 1;
+                    set_variable(var, (uint16_t)v);
+                }
                 handle_branch(v > (int16_t)op2);
             }
             break;
@@ -258,7 +422,12 @@ void execute_next_instruction(void) {
             }
             break;
         case 0x0D: /* STORE: store op2 into variable op1 */
-            set_variable((uint8_t)op1, op2);
+            if ((uint8_t)op1 == 0u) {
+                pop_stack();
+                push_stack(op2);
+            } else {
+                set_variable((uint8_t)op1, op2);
+            }
             break;
         case 0x0E: /* INSERT_OBJ: make op1 a child of op2 */
             {
@@ -464,11 +633,21 @@ void execute_next_instruction(void) {
                 break;
             case 0x05: /* INC */
                 var = (uint8_t)op1;
-                set_variable(var, (uint16_t)((int16_t)get_variable(var) + 1));
+                if (var == 0u) {
+                    uint16_t v = pop_stack() + 1u;
+                    push_stack(v);
+                } else {
+                    set_variable(var, (uint16_t)((int16_t)get_variable(var) + 1));
+                }
                 break;
             case 0x06: /* DEC */
                 var = (uint8_t)op1;
-                set_variable(var, (uint16_t)((int16_t)get_variable(var) - 1));
+                if (var == 0u) {
+                    uint16_t v = pop_stack() - 1u;
+                    push_stack(v);
+                } else {
+                    set_variable(var, (uint16_t)((int16_t)get_variable(var) - 1));
+                }
                 break;
             case 0x07: /* PRINT_ADDR: print z-string at byte address */
                 decode_zstring((uint32_t)op1);
@@ -504,7 +683,11 @@ void execute_next_instruction(void) {
                 decode_zstring((uint32_t)op1 * 2u);
                 break;
             case 0x0E: /* LOAD: load variable */
-                set_variable(FETCH_BYTE(), get_variable((uint8_t)op1));
+                {
+                    uint8_t v = (uint8_t)op1;
+                    uint16_t val = (v == 0u) ? peek_stack() : get_variable(v);
+                    set_variable(FETCH_BYTE(), val);
+                }
                 break;
             case 0x0F: /* NOT */
                 set_variable(FETCH_BYTE(), ~op1);
@@ -527,7 +710,15 @@ void execute_next_instruction(void) {
             uint8_t base_op = opcode & 0x1Fu;
             /* These mirror the 2OP table — most commonly it's just CALL */
             switch (base_op) {
-            case 0x01: handle_branch(nops >= 2u && ops[0] == ops[1]); break;
+            case 0x01:
+                {
+                    uint8_t cond = 0u;
+                    if (nops >= 2u && ops[0] == ops[1]) cond = 1u;
+                    if (nops >= 3u && ops[0] == ops[2]) cond = 1u;
+                    if (nops >= 4u && ops[0] == ops[3]) cond = 1u;
+                    handle_branch(cond);
+                }
+                break;
             case 0x14: if (nops >= 2u) set_variable(FETCH_BYTE(), (uint16_t)((int16_t)ops[0] + (int16_t)ops[1])); break;
             case 0x15: if (nops >= 2u) set_variable(FETCH_BYTE(), (uint16_t)((int16_t)ops[0] - (int16_t)ops[1])); break;
             default: break;
@@ -606,7 +797,15 @@ void execute_next_instruction(void) {
             if (nops >= 1u) push_stack(ops[0]);
             break;
         case 0xE9: /* PULL */
-            if (nops >= 1u) set_variable((uint8_t)ops[0], pop_stack());
+            if (nops >= 1u) {
+                uint8_t v = (uint8_t)ops[0];
+                if (v == 0u) {
+                    uint8_t dest = (uint8_t)pop_stack();
+                    set_variable(dest, pop_stack());
+                } else {
+                    set_variable(v, pop_stack());
+                }
+            }
             break;
         case 0xEA: /* SPLIT_WINDOW — no-op on GB */
             break;

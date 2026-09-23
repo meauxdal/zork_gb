@@ -15,5 +15,6 @@ extern uint32_t z_machine_pc;
 
 void z_dispatcher_init(void);
 void execute_next_instruction(void);
+void z_tokenize(uint16_t text_buf, uint16_t parse_buf);
 
 #endif /* Z_DISPATCHER_H */

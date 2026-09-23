@@ -24,6 +24,9 @@
 static uint8_t cur_x;
 static uint8_t cur_y;
 
+/* Screen tile buffer for rows 1..17 */
+static uint8_t text_screen[TEXT_ROWS][COLS];
+
 /* Saved cursor for status bar rendering */
 static uint8_t saved_x;
 static uint8_t saved_y;
@@ -35,23 +38,24 @@ static void clear_row(uint8_t row) {
     uint8_t x;
     for (x = 0; x < COLS; x++) {
         set_bkg_tile_xy(x, row, 0x20u); /* 0x20 = space tile */
+        if (row >= TEXT_TOP && row <= TEXT_BOTTOM) {
+            text_screen[row - TEXT_TOP][x] = 0x20u;
+        }
     }
 }
 
 static void scroll_up(void) {
     uint8_t row, x;
-    /* Copy each row's tiles up one row */
-    for (row = TEXT_TOP; row < TEXT_BOTTOM; row++) {
-        for (x = 0; x < COLS; x++) {
-            /*
-             * GBDK doesn't provide get_bkg_tile_xy, so we'd need our own
-             * tile shadow to do this properly. For now: clear-on-wrap is
-             * simpler and good enough for MVP. Real scroll comes later.
-             */
-            (void)row; (void)x;
+    /* Copy each row's tiles up one row in text_screen buffer and update VRAM */
+    for (row = 0u; row < TEXT_ROWS - 1u; row++) {
+        for (x = 0u; x < COLS; x++) {
+            uint8_t tile = text_screen[row + 1u][x];
+            if (text_screen[row][x] != tile) {
+                text_screen[row][x] = tile;
+                set_bkg_tile_xy(x, row + TEXT_TOP, tile);
+            }
         }
     }
-    /* MVP: just clear bottom row and stay there rather than true scroll */
     cur_y = TEXT_BOTTOM;
     clear_row(cur_y);
 }
@@ -81,6 +85,9 @@ void z_render_put_char(char c) {
         if (cur_x > 0) {
             cur_x--;
             set_bkg_tile_xy(cur_x, cur_y, 0x20u);
+            if (cur_y >= TEXT_TOP && cur_y <= TEXT_BOTTOM) {
+                text_screen[cur_y - TEXT_TOP][cur_x] = 0x20u;
+            }
         }
         return;
     }
@@ -94,6 +101,9 @@ void z_render_put_char(char c) {
     }
 
     set_bkg_tile_xy(cur_x, cur_y, (uint8_t)c);
+    if (cur_y >= TEXT_TOP && cur_y <= TEXT_BOTTOM) {
+        text_screen[cur_y - TEXT_TOP][cur_x] = (uint8_t)c;
+    }
     cur_x++;
 }
 

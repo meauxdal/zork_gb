@@ -19,6 +19,7 @@ void     z_stack_init(void);
 /* Evaluation stack */
 void     push_stack(uint16_t value);
 uint16_t pop_stack(void);
+uint16_t peek_stack(void);
 
 /* Variable access */
 uint16_t get_variable(uint8_t var);

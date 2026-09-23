@@ -17,6 +17,10 @@
 void z_render_init(void);
 void z_render_put_char(char c);
 
+/* Candidate character display for hi-score style D-Pad entry */
+void z_render_show_candidate(char c);
+void z_render_clear_candidate(void);
+
 /* Cursor control for the status bar — saves/restores main cursor. */
 void z_render_status_begin(void);
 void z_render_status_end(void);

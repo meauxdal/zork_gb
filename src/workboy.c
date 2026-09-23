@@ -21,7 +21,11 @@ char workboy_get_char(void) {
     /* 1. Initiate Serial Transfer */
     /* SB is irrelevant on send for Workboy, but we must trigger the clock */
     SB_REG = 0x00; 
+#ifdef SC_REG_WRITE
+    SC_REG_WRITE(0x81);
+#else
     SC_REG = 0x81; /* Start transfer, Internal Clock */
+#endif
 
     /* 2. Wait for transfer completion */
     /* On a real GB, this takes ~1ms. In Z-Machine loop, we poll the SC bit 7. */
@@ -30,14 +34,15 @@ char workboy_get_char(void) {
     scancode = SB_REG;
 
     /* 3. Validation */
-    if (scancode == 0xFF || scancode > 0x4F) {
+    static uint8_t last_scan = 0xFF;
+    if (scancode == 0xFF || scancode >= sizeof(workboy_map)) {
+        last_scan = 0xFF;
         return 0;
     }
 
     /* 4. Basic Debouncing / Edge Detection */
     /* To prevent a single press from filling the buffer, the dispatcher 
        should only accept this char if the previous poll was 0xFF. */
-    static uint8_t last_scan = 0xFF;
     if (scancode == last_scan) return 0;
     
     last_scan = scancode;

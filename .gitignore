@@ -7,7 +7,6 @@
 *.lst
 *.ihx
 *.noi
-test_runner
 
 # OS junk
 .DS_Store

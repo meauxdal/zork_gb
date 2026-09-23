@@ -238,37 +238,115 @@ void z_tokenize(uint16_t text_buf, uint16_t parse_buf) {
 }
 
 /* -----------------------------------------------------------------------
- * sread (opcode 0xE4) — blocking input from Workboy
+ * sread (opcode 0xE4) — blocking input from Workboy or GB Game Pad
  *
  * text_buf layout: [max_chars][char0][char1]...[0x00 terminator]
  * parse_buf: lexical analysis
  * ----------------------------------------------------------------------- */
+static const char candidate_chars[] = "abcdefghijklmnopqrstuvwxyz 0123456789.,'-?";
+#define NUM_CANDIDATES (sizeof(candidate_chars) - 1u)
+
 static void op_sread(uint16_t text_buf, uint16_t parse_buf) {
-    uint8_t max_chars = z_read_byte(text_buf);
-    uint8_t count     = 0;
+    uint8_t max_chars     = z_read_byte(text_buf);
+    uint8_t count         = 0;
+    uint8_t candidate_idx = 0;
+    uint8_t old_pad       = 0;
+    uint8_t repeat_timer  = 0;
     char    c;
 
     while (count < max_chars - 1u) {
+        /* Display candidate character at current cursor position */
+        z_render_show_candidate(candidate_chars[candidate_idx]);
+
+        /* Check Workboy input */
         c = workboy_get_char();
-        if (c == 0) {
+        if (c != 0) {
+            if (c == '\r' || c == '\n') break;
+
+            if (c == '\b') {
+                if (count > 0u) {
+                    z_render_clear_candidate();
+                    count--;
+                    z_render_put_char('\b');
+                    candidate_idx = 0;
+                }
+                wait_vbl_done();
+                continue;
+            }
+
+            /* Direct character input from Workboy */
+            z_render_clear_candidate();
+            z_render_put_char(c);
+            if (c >= 'A' && c <= 'Z') c += 32;
+            z_write_byte(text_buf + 1u + count, (uint8_t)c);
+            count++;
+            candidate_idx = 0;
             wait_vbl_done();
             continue;
         }
 
-        if (c == '\r' || c == '\n') break;
+        /* Check Game Pad input */
+        uint8_t pad = joypad();
+        uint8_t pad_edge = pad & ~old_pad;
+        old_pad = pad;
 
-        if (c == '\b' && count > 0u) {
-            count--;
-            z_render_put_char('\b');
+        if (pad_edge & J_START) {
+            z_render_clear_candidate();
+            break;
+        }
+
+        if (pad_edge & (J_A | J_RIGHT)) {
+            char sel = candidate_chars[candidate_idx];
+            z_render_clear_candidate();
+            z_render_put_char(sel);
+            z_write_byte(text_buf + 1u + count, (uint8_t)sel);
+            count++;
+            candidate_idx = 0;
+            wait_vbl_done();
             continue;
         }
 
-        z_render_put_char(c);
-        /* Z-machine expects lowercase in the text buffer */
-        if (c >= 'A' && c <= 'Z') c += 32;
-        z_write_byte(text_buf + 1u + count, (uint8_t)c);
-        count++;
+        if (pad_edge & (J_B | J_LEFT)) {
+            if (count > 0u) {
+                z_render_clear_candidate();
+                count--;
+                z_render_put_char('\b');
+                candidate_idx = 0;
+            }
+            wait_vbl_done();
+            continue;
+        }
+
+        /* D-Pad Up / Down handling with auto-repeat */
+        if (pad & J_UP) {
+            if (pad_edge & J_UP) {
+                candidate_idx = (candidate_idx + 1u) % NUM_CANDIDATES;
+                repeat_timer = 12u;
+            } else if (repeat_timer > 0u) {
+                repeat_timer--;
+            } else {
+                candidate_idx = (candidate_idx + 1u) % NUM_CANDIDATES;
+                repeat_timer = 3u;
+            }
+        } else if (pad & J_DOWN) {
+            if (pad_edge & J_DOWN) {
+                candidate_idx = (candidate_idx + NUM_CANDIDATES - 1u) % NUM_CANDIDATES;
+                repeat_timer = 12u;
+            } else if (repeat_timer > 0u) {
+                repeat_timer--;
+            } else {
+                candidate_idx = (candidate_idx + NUM_CANDIDATES - 1u) % NUM_CANDIDATES;
+                repeat_timer = 3u;
+            }
+        } else {
+            repeat_timer = 0u;
+        }
+
+        wait_vbl_done();
     }
+
+    z_render_clear_candidate();
+    z_render_put_char('\n');
     z_write_byte(text_buf + 1u + count, 0u);
 
     if (parse_buf) {

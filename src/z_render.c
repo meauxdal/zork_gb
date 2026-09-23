@@ -84,10 +84,15 @@ void z_render_put_char(char c) {
     if (c == '\b') {
         if (cur_x > 0) {
             cur_x--;
-            set_bkg_tile_xy(cur_x, cur_y, 0x20u);
-            if (cur_y >= TEXT_TOP && cur_y <= TEXT_BOTTOM) {
-                text_screen[cur_y - TEXT_TOP][cur_x] = 0x20u;
-            }
+        } else if (cur_y > TEXT_TOP) {
+            cur_y--;
+            cur_x = COLS - 1u;
+        } else {
+            return;
+        }
+        set_bkg_tile_xy(cur_x, cur_y, 0x20u);
+        if (cur_y >= TEXT_TOP && cur_y <= TEXT_BOTTOM) {
+            text_screen[cur_y - TEXT_TOP][cur_x] = 0x20u;
         }
         return;
     }
@@ -105,6 +110,22 @@ void z_render_put_char(char c) {
         text_screen[cur_y - TEXT_TOP][cur_x] = (uint8_t)c;
     }
     cur_x++;
+}
+
+void z_render_show_candidate(char c) {
+    if (cur_x >= COLS) {
+        if (cur_y == 0) return;
+        cur_x = 0;
+        cur_y++;
+        if (cur_y > TEXT_BOTTOM) scroll_up();
+    }
+    set_bkg_tile_xy(cur_x, cur_y, (uint8_t)c);
+}
+
+void z_render_clear_candidate(void) {
+    if (cur_x < COLS) {
+        set_bkg_tile_xy(cur_x, cur_y, 0x20u);
+    }
 }
 
 void z_render_status_begin(void) {

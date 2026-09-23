@@ -8,8 +8,8 @@ CC     = lcc
 CFLAGS  = -Iinclude -Wa-l
 # -Wl-m: map file  -Wl-j: join identical sections
 # -Wl-yt0x1B: MBC5 (0x1B)  -Wl-yo4: 4 ROM banks min
-# -Wl-ya1: 1 SRAM bank (for future save support)
-LDFLAGS = -Wl-m -Wl-j -Wl-yt0x1B -Wl-yo16 -Wl-ya1
+# -Wl-ya4: 4 SRAM banks (dynamic memory + save state)
+LDFLAGS = -Wl-m -Wl-j -Wl-yt0x1B -Wl-yo16 -Wl-ya4
 
 SRCDIR  = src
 DATADIR = data

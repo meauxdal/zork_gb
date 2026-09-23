@@ -1,20 +1,13 @@
 /*
  * z_memory.c
  *
- * Two-region writable memory:
+ * Z-machine memory map for the Zork I V3 story:
  *
- *   z_wram[0x1000]      : shadow of z-file 0x0000..0x0FFF
- *                         covers header + entire object table
+ *   0x0000..0x0FFF : dynamic memory in Game Boy WRAM
+ *   0x1000..0x2E52 : dynamic memory in cartridge SRAM bank 0
+ *   0x2E53+        : read-only story data in banked ROM
  *
- *   z_globals[240*2]    : shadow of z-file 0x2008..0x21E7
- *                         covers all 240 global variables
- *
- * Everything else is read-only from banked ROM.
- *
- * Read priority:
- *   1. If address is in 0x0000..0x0FFF  -> z_wram
- *   2. If address is in globals range   -> z_globals
- *   3. Otherwise                        -> banked ROM
+ * SRAM banks 1 and 2 hold the save state.
  */
 
 #include <gb/gb.h>
@@ -25,20 +18,19 @@
 #include "z_variable_stack.h"
 #include "z_dispatcher.h"
 
-static uint8_t z_wram[Z_DYNAMIC_SIZE];           /* 4096 bytes */
-static uint8_t z_globals[Z_GLOBALS_COUNT * 2u];  /* 480 bytes  */
-
-#ifndef ENABLE_RAM
-#define ENABLE_RAM
-#define DISABLE_RAM
-#endif
+static uint8_t z_wram[Z_DYNAMIC_WRAM_SIZE];
 
 #define SRAM_BASE ((uint8_t *)0xA000u)
+#define SRAM_BANK_SIZE 0x2000u
+
+#define Z_DYNAMIC_SRAM_BANK 0u
+#define Z_SAVE_SRAM_FIRST   1u
+
+static uint16_t z_static_base = Z_DYNAMIC_SIZE;
 static const char SAVE_MAGIC[8] = "ZORKGB01";
 
-/* The globals base address is read from the z-file header at 0x0C.
- * We cache it after init so we don't re-read the header constantly. */
-static uint16_t z_globals_base = 0u;
+/* Temporary buffer for copying between SRAM banks. */
+static uint8_t sram_copy_buf[128];
 
 static uint8_t rom_read_byte(uint32_t address) {
     uint8_t  bank_index = (uint8_t)(address >> 14u);
@@ -61,33 +53,107 @@ static uint8_t rom_read_byte(uint32_t address) {
     return val;
 }
 
+static void sram_save_write(uint16_t offset, const uint8_t *src, uint16_t len) {
+    while (len != 0u) {
+        uint8_t bank = (uint8_t)(Z_SAVE_SRAM_FIRST + (offset / SRAM_BANK_SIZE));
+        uint16_t bank_offset = offset & (SRAM_BANK_SIZE - 1u);
+        uint16_t chunk = (uint16_t)(SRAM_BANK_SIZE - bank_offset);
+        if (chunk > len) chunk = len;
+
+        SWITCH_RAM(bank);
+        memcpy(SRAM_BASE + bank_offset, src, chunk);
+
+        offset = (uint16_t)(offset + chunk);
+        src += chunk;
+        len = (uint16_t)(len - chunk);
+    }
+}
+
+static void sram_save_read(uint16_t offset, uint8_t *dst, uint16_t len) {
+    while (len != 0u) {
+        uint8_t bank = (uint8_t)(Z_SAVE_SRAM_FIRST + (offset / SRAM_BANK_SIZE));
+        uint16_t bank_offset = offset & (SRAM_BANK_SIZE - 1u);
+        uint16_t chunk = (uint16_t)(SRAM_BANK_SIZE - bank_offset);
+        if (chunk > len) chunk = len;
+
+        SWITCH_RAM(bank);
+        memcpy(dst, SRAM_BASE + bank_offset, chunk);
+
+        offset = (uint16_t)(offset + chunk);
+        dst += chunk;
+        len = (uint16_t)(len - chunk);
+    }
+}
+
+static void save_dynamic_sram(uint16_t *offset) {
+    uint16_t src_offset = Z_DYNAMIC_WRAM_SIZE;
+    uint16_t remaining = (uint16_t)(z_static_base - Z_DYNAMIC_WRAM_SIZE);
+
+    while (remaining != 0u) {
+        uint16_t chunk = remaining;
+        if (chunk > sizeof(sram_copy_buf))
+            chunk = sizeof(sram_copy_buf);
+
+        SWITCH_RAM(Z_DYNAMIC_SRAM_BANK);
+        memcpy(sram_copy_buf, SRAM_BASE + (src_offset - Z_DYNAMIC_WRAM_SIZE), chunk);
+        sram_save_write(*offset, sram_copy_buf, chunk);
+
+        *offset = (uint16_t)(*offset + chunk);
+        src_offset = (uint16_t)(src_offset + chunk);
+        remaining = (uint16_t)(remaining - chunk);
+    }
+}
+
+static void restore_dynamic_sram(uint16_t *offset) {
+    uint16_t dst_offset = Z_DYNAMIC_WRAM_SIZE;
+    uint16_t remaining = (uint16_t)(z_static_base - Z_DYNAMIC_WRAM_SIZE);
+
+    while (remaining != 0u) {
+        uint16_t chunk = remaining;
+        if (chunk > sizeof(sram_copy_buf))
+            chunk = sizeof(sram_copy_buf);
+
+        sram_save_read(*offset, sram_copy_buf, chunk);
+
+        SWITCH_RAM(Z_DYNAMIC_SRAM_BANK);
+        memcpy(SRAM_BASE + (dst_offset - Z_DYNAMIC_WRAM_SIZE), sram_copy_buf, chunk);
+
+        *offset = (uint16_t)(*offset + chunk);
+        dst_offset = (uint16_t)(dst_offset + chunk);
+        remaining = (uint16_t)(remaining - chunk);
+    }
+}
+
 void z_mem_init(void) {
     uint16_t i;
 
-    /* Copy header + object table region */
-    for (i = 0u; i < Z_DYNAMIC_SIZE; i++) {
+    /* Header + object table live in WRAM. */
+    for (i = 0u; i < Z_DYNAMIC_WRAM_SIZE; i++) {
         z_wram[i] = rom_read_byte((uint32_t)i);
     }
 
-    /* Read the actual globals table base from the header (offset 0x0C) */
-    z_globals_base = (uint16_t)((uint16_t)z_wram[0x0Cu] << 8)
-                   | (uint16_t)z_wram[0x0Du];
+    z_static_base = z_read_word(0x0Eu);
+    if (z_static_base < Z_DYNAMIC_WRAM_SIZE || z_static_base > Z_DYNAMIC_SIZE)
+        z_static_base = Z_DYNAMIC_SIZE;
 
-    /* Copy globals */
-    for (i = 0u; i < Z_GLOBALS_COUNT * 2u; i++) {
-        z_globals[i] = rom_read_byte((uint32_t)z_globals_base + i);
+    /* Remaining dynamic memory lives in SRAM bank 0. */
+    ENABLE_RAM;
+    SWITCH_RAM(Z_DYNAMIC_SRAM_BANK);
+
+    for (i = Z_DYNAMIC_WRAM_SIZE; i < z_static_base; i++) {
+        SRAM_BASE[i - Z_DYNAMIC_WRAM_SIZE] = rom_read_byte((uint32_t)i);
     }
 }
 
 uint8_t z_read_byte(uint32_t address) {
-    if (address < (uint32_t)Z_DYNAMIC_SIZE) {
+    if (address < (uint32_t)Z_DYNAMIC_WRAM_SIZE) {
         return z_wram[(uint16_t)address];
     }
-    if (z_globals_base != 0u &&
-        address >= (uint32_t)z_globals_base &&
-        address <  (uint32_t)z_globals_base + (uint32_t)(Z_GLOBALS_COUNT * 2u)) {
-        return z_globals[(uint16_t)(address - z_globals_base)];
+
+    if (address < (uint32_t)z_static_base) {
+        return SRAM_BASE[(uint16_t)(address - Z_DYNAMIC_WRAM_SIZE)];
     }
+
     return rom_read_byte(address);
 }
 
@@ -97,16 +163,14 @@ uint16_t z_read_word(uint32_t address) {
 }
 
 void z_write_byte(uint32_t address, uint8_t value) {
-    if (address < (uint32_t)Z_DYNAMIC_SIZE) {
+    if (address < (uint32_t)Z_DYNAMIC_WRAM_SIZE) {
         z_wram[(uint16_t)address] = value;
         return;
     }
-    if (z_globals_base != 0u &&
-        address >= (uint32_t)z_globals_base &&
-        address <  (uint32_t)z_globals_base + (uint32_t)(Z_GLOBALS_COUNT * 2u)) {
-        z_globals[(uint16_t)(address - z_globals_base)] = value;
+
+    if (address < (uint32_t)z_static_base) {
+        SRAM_BASE[(uint16_t)(address - Z_DYNAMIC_WRAM_SIZE)] = value;
     }
-    /* Writes to other static addresses are silently ignored */
 }
 
 void z_write_word(uint32_t address, uint16_t value) {
@@ -115,74 +179,68 @@ void z_write_word(uint32_t address, uint16_t value) {
 }
 
 uint8_t z_save_state(void) {
+    uint16_t offset = 0u;
+
     ENABLE_RAM;
-    uint8_t *ptr = SRAM_BASE;
 
-    /* Magic header */
-    memcpy(ptr, SAVE_MAGIC, 8);
-    ptr += 8;
+    sram_save_write(offset, (const uint8_t *)SAVE_MAGIC, 8u);
+    offset = (uint16_t)(offset + 8u);
 
-    /* PC */
-    memcpy(ptr, &z_machine_pc, sizeof(z_machine_pc));
-    ptr += sizeof(z_machine_pc);
+    sram_save_write(offset, (const uint8_t *)&z_machine_pc, sizeof(z_machine_pc));
+    offset = (uint16_t)(offset + sizeof(z_machine_pc));
 
-    /* z_wram */
-    memcpy(ptr, z_wram, Z_DYNAMIC_SIZE);
-    ptr += Z_DYNAMIC_SIZE;
+    sram_save_write(offset, z_wram, Z_DYNAMIC_WRAM_SIZE);
+    offset = (uint16_t)(offset + Z_DYNAMIC_WRAM_SIZE);
 
-    /* z_globals */
-    memcpy(ptr, z_globals, Z_GLOBALS_COUNT * 2u);
-    ptr += Z_GLOBALS_COUNT * 2u;
+    save_dynamic_sram(&offset);
 
-    /* Evaluation stack */
-    *ptr++ = sp;
-    memcpy(ptr, z_stack, sizeof(z_stack));
-    ptr += sizeof(z_stack);
+    sram_save_write(offset, &sp, sizeof(sp));
+    offset = (uint16_t)(offset + sizeof(sp));
 
-    /* Call stack */
-    memcpy(ptr, &fp, sizeof(fp));
-    ptr += sizeof(fp);
-    memcpy(ptr, call_stack, sizeof(call_stack));
-    ptr += sizeof(call_stack);
+    sram_save_write(offset, (const uint8_t *)z_stack, sizeof(z_stack));
+    offset = (uint16_t)(offset + sizeof(z_stack));
 
-    DISABLE_RAM;
+    sram_save_write(offset, (const uint8_t *)&fp, sizeof(fp));
+    offset = (uint16_t)(offset + sizeof(fp));
+
+    sram_save_write(offset, (const uint8_t *)call_stack, sizeof(call_stack));
+
+    SWITCH_RAM(Z_DYNAMIC_SRAM_BANK);
     return 1u;
 }
 
 uint8_t z_restore_state(void) {
-    ENABLE_RAM;
-    uint8_t *ptr = SRAM_BASE;
+    uint16_t offset = 0u;
+    char magic[8];
 
-    /* Check Magic header */
-    if (memcmp(ptr, SAVE_MAGIC, 8) != 0) {
-        DISABLE_RAM;
+    ENABLE_RAM;
+
+    sram_save_read(offset, (uint8_t *)magic, sizeof(magic));
+    if (memcmp(magic, SAVE_MAGIC, sizeof(magic)) != 0) {
+        SWITCH_RAM(Z_DYNAMIC_SRAM_BANK);
         return 0u;
     }
-    ptr += 8;
+    offset = (uint16_t)(offset + sizeof(magic));
 
-    /* PC */
-    memcpy(&z_machine_pc, ptr, sizeof(z_machine_pc));
-    ptr += sizeof(z_machine_pc);
+    sram_save_read(offset, (uint8_t *)&z_machine_pc, sizeof(z_machine_pc));
+    offset = (uint16_t)(offset + sizeof(z_machine_pc));
 
-    /* z_wram */
-    memcpy(z_wram, ptr, Z_DYNAMIC_SIZE);
-    ptr += Z_DYNAMIC_SIZE;
+    sram_save_read(offset, z_wram, Z_DYNAMIC_WRAM_SIZE);
+    offset = (uint16_t)(offset + Z_DYNAMIC_WRAM_SIZE);
 
-    /* z_globals */
-    memcpy(z_globals, ptr, Z_GLOBALS_COUNT * 2u);
-    ptr += Z_GLOBALS_COUNT * 2u;
+    restore_dynamic_sram(&offset);
 
-    /* Evaluation stack */
-    sp = *ptr++;
-    memcpy(z_stack, ptr, sizeof(z_stack));
-    ptr += sizeof(z_stack);
+    sram_save_read(offset, &sp, sizeof(sp));
+    offset = (uint16_t)(offset + sizeof(sp));
 
-    /* Call stack */
-    memcpy(&fp, ptr, sizeof(fp));
-    ptr += sizeof(fp);
-    memcpy(call_stack, ptr, sizeof(call_stack));
-    ptr += sizeof(call_stack);
+    sram_save_read(offset, (uint8_t *)z_stack, sizeof(z_stack));
+    offset = (uint16_t)(offset + sizeof(z_stack));
 
-    DISABLE_RAM;
+    sram_save_read(offset, (uint8_t *)&fp, sizeof(fp));
+    offset = (uint16_t)(offset + sizeof(fp));
+
+    sram_save_read(offset, (uint8_t *)call_stack, sizeof(call_stack));
+
+    SWITCH_RAM(Z_DYNAMIC_SRAM_BANK);
     return 1u;
 }

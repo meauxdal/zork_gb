@@ -93,7 +93,7 @@ void z_write_word(uint32_t address, uint16_t value) {
 #include "../include/z_object_engine.h"
 
 /* Mock SRAM for host test suite */
-static uint8_t mock_sram[8192];
+static uint8_t mock_sram[16384];
 
 uint8_t z_save_state(void) {
     uint8_t *ptr = mock_sram;

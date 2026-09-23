@@ -33,18 +33,33 @@ char workboy_get_char(void) {
 
     scancode = SB_REG;
 
-    /* 3. Validation */
-    static uint8_t last_scan = 0xFF;
-    if (scancode == 0xFF || scancode >= sizeof(workboy_map)) {
-        last_scan = 0xFF;
+    /* 3. Validation & Multi-Sample Debouncing */
+    static uint8_t pending_scan = 0xFFu;
+    static uint8_t pending_count = 0u;
+    static uint8_t last_reported_scan = 0xFFu;
+
+    if (scancode == 0xFFu || scancode >= sizeof(workboy_map) || workboy_map[scancode] == 0) {
+        /* Idle / invalid scancode: reset sample counters and key-held state */
+        pending_scan = 0xFFu;
+        pending_count = 0u;
+        last_reported_scan = 0xFFu;
         return 0;
     }
 
-    /* 4. Basic Debouncing / Edge Detection */
-    /* To prevent a single press from filling the buffer, the dispatcher 
-       should only accept this char if the previous poll was 0xFF. */
-    if (scancode == last_scan) return 0;
-    
-    last_scan = scancode;
-    return workboy_map[scancode];
+    /* Require 3 consecutive identical valid reads (~3 frames) to reject noise */
+    if (scancode == pending_scan) {
+        if (pending_count < 255u) pending_count++;
+    } else {
+        pending_scan = scancode;
+        pending_count = 1u;
+    }
+
+    if (pending_count >= 3u) {
+        if (scancode != last_reported_scan) {
+            last_reported_scan = scancode;
+            return workboy_map[scancode];
+        }
+    }
+
+    return 0;
 }

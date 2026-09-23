@@ -424,20 +424,39 @@ int main(void) {
     test_save_restore();
     test_print_num();
 
-    /* Test serial noise handling in workboy_get_char */
+    /* Test serial noise handling and debouncing in workboy_get_char */
     printf("[TEST] Testing Workboy serial link noise handling...\n");
     mock_workboy_rx = 0xFF;
     assert(workboy_get_char() == 0);
-    mock_workboy_rx = 0x31; /* 0x31 mapped to 'A' in workboy_map */
-    char fetched = workboy_get_char();
+
+    /* 1. Transient noise spike (e.g. 0x0A enter key spike for 1 or 2 polls) must be rejected */
+    mock_workboy_rx = 0x0A;
+    assert(workboy_get_char() == 0); /* 1st poll */
+    assert(workboy_get_char() == 0); /* 2nd poll */
+    mock_workboy_rx = 0x00;           /* noise stops / idle */
+    assert(workboy_get_char() == 0);
+
+    /* 2. Sustained valid key press ('A' = 0x31) across 3 consecutive polls */
+    mock_workboy_rx = 0x31;
+    assert(workboy_get_char() == 0); /* Poll 1 */
+    assert(workboy_get_char() == 0); /* Poll 2 */
+    char fetched = workboy_get_char(); /* Poll 3: confirmed! */
     assert(fetched == 'A');
-    mock_workboy_rx = 0x31; /* repeat without reset */
+
+    /* 3. Key held down does not re-trigger */
+    assert(workboy_get_char() == 0); /* Poll 4 */
+
+    /* 4. Release key and press 'Enter' (0x0A) stably */
+    mock_workboy_rx = 0xFF; /* release */
     assert(workboy_get_char() == 0);
-    mock_workboy_rx = 0xFF; /* noise / disconnected */
-    assert(workboy_get_char() == 0);
-    mock_workboy_rx = 0x31; /* 'A' after noise reset */
-    assert(workboy_get_char() == 'A');
+
+    mock_workboy_rx = 0x0A; /* Enter key */
+    assert(workboy_get_char() == 0); /* Poll 1 */
+    assert(workboy_get_char() == 0); /* Poll 2 */
+    assert(workboy_get_char() == '\n'); /* Poll 3: confirmed Enter */
+
     mock_workboy_rx = 0xFF;
+    assert(workboy_get_char() == 0);
     printf("  Workboy serial noise tests passed!\n");
 
     /* Test Game Pad input in op_sread */

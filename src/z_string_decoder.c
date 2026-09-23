@@ -97,6 +97,7 @@ static uint32_t decode_zstring_inner(uint32_t address) {
             /* --- Normal z-character --- */
             if (c == 0u) {
                 z_render_put_char(' ');
+                current_set  = 0;
             } else if (c == 1u || c == 2u || c == 3u) {
                 abbrev_mode = c;
             } else if (c == 4u) {

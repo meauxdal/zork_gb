@@ -70,15 +70,24 @@ void z_render_init(void) {
 }
 
 void z_render_put_char(char c) {
-    if (c == '\n') {
+    if (c == '\n' || c == '\r') {
         cur_x = 0;
         cur_y++;
         if (cur_y > TEXT_BOTTOM) scroll_up();
         return;
     }
 
-    /* Auto-wrap */
+    if (c == '\b') {
+        if (cur_x > 0) {
+            cur_x--;
+            set_bkg_tile_xy(cur_x, cur_y, 0x20u);
+        }
+        return;
+    }
+
+    /* Auto-wrap: status bar (y=0) never wraps */
     if (cur_x >= COLS) {
+        if (cur_y == 0) return;
         cur_x = 0;
         cur_y++;
         if (cur_y > TEXT_BOTTOM) scroll_up();

@@ -19,11 +19,22 @@
 
 #include <gb/gb.h>
 #include <stdint.h>
+#include <string.h>
 #include "z_memory.h"
 #include "zork_data.h"
+#include "z_variable_stack.h"
+#include "z_dispatcher.h"
 
 static uint8_t z_wram[Z_DYNAMIC_SIZE];           /* 4096 bytes */
 static uint8_t z_globals[Z_GLOBALS_COUNT * 2u];  /* 480 bytes  */
+
+#ifndef ENABLE_RAM
+#define ENABLE_RAM
+#define DISABLE_RAM
+#endif
+
+#define SRAM_BASE ((uint8_t *)0xA000u)
+static const char SAVE_MAGIC[8] = "ZORKGB01";
 
 /* The globals base address is read from the z-file header at 0x0C.
  * We cache it after init so we don't re-read the header constantly. */
@@ -101,4 +112,77 @@ void z_write_byte(uint32_t address, uint8_t value) {
 void z_write_word(uint32_t address, uint16_t value) {
     z_write_byte(address,      (uint8_t)(value >> 8));
     z_write_byte(address + 1u, (uint8_t)(value & 0xFFu));
+}
+
+uint8_t z_save_state(void) {
+    ENABLE_RAM;
+    uint8_t *ptr = SRAM_BASE;
+
+    /* Magic header */
+    memcpy(ptr, SAVE_MAGIC, 8);
+    ptr += 8;
+
+    /* PC */
+    memcpy(ptr, &z_machine_pc, sizeof(z_machine_pc));
+    ptr += sizeof(z_machine_pc);
+
+    /* z_wram */
+    memcpy(ptr, z_wram, Z_DYNAMIC_SIZE);
+    ptr += Z_DYNAMIC_SIZE;
+
+    /* z_globals */
+    memcpy(ptr, z_globals, Z_GLOBALS_COUNT * 2u);
+    ptr += Z_GLOBALS_COUNT * 2u;
+
+    /* Evaluation stack */
+    *ptr++ = sp;
+    memcpy(ptr, z_stack, sizeof(z_stack));
+    ptr += sizeof(z_stack);
+
+    /* Call stack */
+    memcpy(ptr, &fp, sizeof(fp));
+    ptr += sizeof(fp);
+    memcpy(ptr, call_stack, sizeof(call_stack));
+    ptr += sizeof(call_stack);
+
+    DISABLE_RAM;
+    return 1u;
+}
+
+uint8_t z_restore_state(void) {
+    ENABLE_RAM;
+    uint8_t *ptr = SRAM_BASE;
+
+    /* Check Magic header */
+    if (memcmp(ptr, SAVE_MAGIC, 8) != 0) {
+        DISABLE_RAM;
+        return 0u;
+    }
+    ptr += 8;
+
+    /* PC */
+    memcpy(&z_machine_pc, ptr, sizeof(z_machine_pc));
+    ptr += sizeof(z_machine_pc);
+
+    /* z_wram */
+    memcpy(z_wram, ptr, Z_DYNAMIC_SIZE);
+    ptr += Z_DYNAMIC_SIZE;
+
+    /* z_globals */
+    memcpy(z_globals, ptr, Z_GLOBALS_COUNT * 2u);
+    ptr += Z_GLOBALS_COUNT * 2u;
+
+    /* Evaluation stack */
+    sp = *ptr++;
+    memcpy(z_stack, ptr, sizeof(z_stack));
+    ptr += sizeof(z_stack);
+
+    /* Call stack */
+    memcpy(&fp, ptr, sizeof(fp));
+    ptr += sizeof(fp);
+    memcpy(call_stack, ptr, sizeof(call_stack));
+    ptr += sizeof(call_stack);
+
+    DISABLE_RAM;
+    return 1u;
 }

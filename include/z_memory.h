@@ -41,4 +41,8 @@ uint16_t z_read_word(uint32_t address);
 void     z_write_byte(uint32_t address, uint8_t value);
 void     z_write_word(uint32_t address, uint16_t value);
 
+/* Save / Restore state in battery-backed SRAM */
+uint8_t  z_save_state(void);
+uint8_t  z_restore_state(void);
+
 #endif /* Z_MEMORY_H */

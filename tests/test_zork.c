@@ -52,11 +52,44 @@ void z_write_word(uint32_t address, uint16_t value) {
 }
 
 /* Include source files directly or implement tests against test copies */
+#include "../include/z_memory.h"
 #include "../include/z_variable_stack.h"
 #include "../include/z_dispatcher.h"
 #include "../include/z_render.h"
 #include "../include/z_status_bar.h"
 #include "../include/z_object_engine.h"
+
+/* Mock SRAM for host test suite */
+static uint8_t mock_sram[8192];
+
+uint8_t z_save_state(void) {
+    uint8_t *ptr = mock_sram;
+    memcpy(ptr, "ZORKGB01", 8); ptr += 8;
+    memcpy(ptr, &z_machine_pc, sizeof(z_machine_pc)); ptr += sizeof(z_machine_pc);
+    memcpy(ptr, story_data, Z_DYNAMIC_SIZE); ptr += Z_DYNAMIC_SIZE;
+    uint16_t gbase = z_read_word(0x0C);
+    memcpy(ptr, story_data + gbase, Z_GLOBALS_COUNT * 2u); ptr += Z_GLOBALS_COUNT * 2u;
+    *ptr++ = sp;
+    memcpy(ptr, z_stack, sizeof(z_stack)); ptr += sizeof(z_stack);
+    memcpy(ptr, &fp, sizeof(fp)); ptr += sizeof(fp);
+    memcpy(ptr, call_stack, sizeof(call_stack)); ptr += sizeof(call_stack);
+    return 1u;
+}
+
+uint8_t z_restore_state(void) {
+    uint8_t *ptr = mock_sram;
+    if (memcmp(ptr, "ZORKGB01", 8) != 0) return 0u;
+    ptr += 8;
+    memcpy(&z_machine_pc, ptr, sizeof(z_machine_pc)); ptr += sizeof(z_machine_pc);
+    memcpy(story_data, ptr, Z_DYNAMIC_SIZE); ptr += Z_DYNAMIC_SIZE;
+    uint16_t gbase = z_read_word(0x0C);
+    memcpy(story_data + gbase, ptr, Z_GLOBALS_COUNT * 2u); ptr += Z_GLOBALS_COUNT * 2u;
+    sp = *ptr++;
+    memcpy(z_stack, ptr, sizeof(z_stack)); ptr += sizeof(z_stack);
+    memcpy(&fp, ptr, sizeof(fp)); ptr += sizeof(fp);
+    memcpy(call_stack, ptr, sizeof(call_stack)); ptr += sizeof(call_stack);
+    return 1u;
+}
 
 /* Include test implementations of stack and renderer */
 #include "../src/z_variable_stack.c"
@@ -193,6 +226,43 @@ void test_status_bar(void) {
     printf("  Status bar tests passed!\n");
 }
 
+void test_save_restore(void) {
+    printf("[TEST] Testing save and restore state...\n");
+    memset(mock_sram, 0, sizeof(mock_sram));
+
+    /* Check restore on empty SRAM returns failure (0) */
+    assert(z_restore_state() == 0u);
+
+    /* Set up test state */
+    z_stack_init();
+    push_stack(1234);
+    push_stack(5678);
+
+    uint16_t gbase = z_read_word(0x0C);
+    z_write_word(gbase + 2, 99); /* Global 1 */
+    z_machine_pc = 0x12345;
+
+    /* Save state */
+    assert(z_save_state() == 1u);
+
+    /* Mutate state */
+    pop_stack();
+    push_stack(9999);
+    z_write_word(gbase + 2, 1);
+    z_machine_pc = 0x54321;
+
+    /* Restore state */
+    assert(z_restore_state() == 1u);
+
+    /* Verify state restored */
+    assert(z_machine_pc == 0x12345);
+    assert(z_read_word(gbase + 2) == 99);
+    assert(pop_stack() == 5678);
+    assert(pop_stack() == 1234);
+
+    printf("  Save and restore tests passed!\n");
+}
+
 int main(void) {
     printf("Starting Zork GB unit tests...\n");
 
@@ -209,6 +279,7 @@ int main(void) {
     test_dictionary_tokenization();
     test_screen_scrolling();
     test_status_bar();
+    test_save_restore();
 
     printf("\nAll unit tests completed successfully!\n");
     return 0;

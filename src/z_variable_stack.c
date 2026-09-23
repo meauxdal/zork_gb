@@ -18,22 +18,11 @@
 #include "z_dispatcher.h"
 #include <string.h>
 
-#define MAX_STACK   64
-#define MAX_FRAMES   8
+uint16_t z_stack[MAX_STACK];
+uint8_t  sp = 0;
 
-typedef struct {
-    uint32_t return_pc;     /* PC to restore on return */
-    uint8_t  store_var;     /* variable to receive return value */
-    uint8_t  num_locals;    /* number of locals in this frame */
-    uint16_t locals[15];    /* V3: up to 15 locals */
-    uint16_t stack_base;    /* sp value at frame entry (for unwinding) */
-} z_frame;
-
-static uint16_t z_stack[MAX_STACK];
-static uint8_t  sp = 0;
-
-static z_frame  call_stack[MAX_FRAMES];
-static int8_t   fp = -1;
+z_frame  call_stack[MAX_FRAMES];
+int8_t   fp = -1;
 
 /* -----------------------------------------------------------------------
  * Init

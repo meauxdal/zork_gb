@@ -8,15 +8,15 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4.4.0
 
       - name: Cache GBDK
         id: cache-gbdk
-        uses: actions/cache@v4
+        uses: actions/cache@v4.3.0
         with:
           path: gbdk/
           key: ${{ runner.os }}-gbdk-2020
@@ -39,7 +39,7 @@ jobs:
           make
 
       - name: Upload ROM Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v4.6.2
         with:
           name: zork_gb_rom
           path: zork_gb.gb

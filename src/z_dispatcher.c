@@ -557,11 +557,11 @@ void execute_next_instruction(void) {
                 break;
             case 0xB4: /* NOP */
                 break;
-            case 0xB5: /* SAVE — not supported on GB; branch false */
-                handle_branch(0u);
+            case 0xB5: /* SAVE — save state to battery SRAM */
+                handle_branch(z_save_state());
                 break;
-            case 0xB6: /* RESTORE — not supported; branch false */
-                handle_branch(0u);
+            case 0xB6: /* RESTORE — restore state from battery SRAM */
+                handle_branch(z_restore_state());
                 break;
             case 0xB7: /* RESTART — reinit and jump to start */
                 z_dispatcher_init();

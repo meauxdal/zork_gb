@@ -4,16 +4,16 @@
  * Z-Machine Version 3 instruction dispatcher.
  *
  * Opcode form detection (spec §4.3):
- *   0x00..0x1F : 2OP, both operands are variables (LONG form, var/var)
- *   0x20..0x3F : 2OP, op1 small const, op2 variable
- *   0x40..0x5F : 2OP, op1 variable, op2 small const
- *   0x60..0x7F : 2OP, both small consts
+ *   0x00..0x1F : 2OP LONG form, op1 small const, op2 small const
+ *   0x20..0x3F : 2OP LONG form, op1 small const, op2 variable
+ *   0x40..0x5F : 2OP LONG form, op1 variable,    op2 small const
+ *   0x60..0x7F : 2OP LONG form, op1 variable,    op2 variable
  *   0x80..0x8F : 1OP, large const
  *   0x90..0x9F : 1OP, small const
  *   0xA0..0xAF : 1OP, variable
  *   0xB0..0xBF : 0OP
- *   0xC0..0xDF : 2OP VAR (operand types in following byte)
- *   0xE0..0xFF : VAR (operand types in following byte)
+ *   0xC0..0xDF : 2OP VAR form (operand types in following byte)
+ *   0xE0..0xFF : VAR form (operand types in following byte)
  *
  * We implement what Zork I actually exercises on its boot path plus
  * a handful more to avoid silent PC corruption on unknown opcodes.
@@ -317,6 +317,215 @@ static uint16_t default_property(uint8_t prop) {
 }
 
 /* -----------------------------------------------------------------------
+ * Execute 2OP instruction (common handler for LONG and VAR forms)
+ * ----------------------------------------------------------------------- */
+static void execute_2op(uint8_t base_op, uint16_t ops[4], uint8_t nops) {
+    uint16_t op1 = (nops >= 1u) ? ops[0] : 0u;
+    uint16_t op2 = (nops >= 2u) ? ops[1] : 0u;
+    uint8_t  var;
+
+    switch (base_op) {
+    case 0x01: /* JE: branch if op1 == op2 (or in VAR form, op1 equals any of op2, op3, op4) */
+        {
+            uint8_t cond = 0u;
+            if (nops >= 2u && op1 == op2) cond = 1u;
+            if (nops >= 3u && op1 == ops[2]) cond = 1u;
+            if (nops >= 4u && op1 == ops[3]) cond = 1u;
+            handle_branch(cond);
+        }
+        break;
+    case 0x02: /* JL: branch if op1 < op2 (signed) */
+        handle_branch((int16_t)op1 < (int16_t)op2);
+        break;
+    case 0x03: /* JG: branch if op1 > op2 (signed) */
+        handle_branch((int16_t)op1 > (int16_t)op2);
+        break;
+    case 0x04: /* DEC_CHK: decrement var, branch if < op2 */
+        var = (uint8_t)op1;
+        {
+            int16_t v;
+            if (var == 0u) {
+                v = (int16_t)pop_stack() - 1;
+                push_stack((uint16_t)v);
+            } else {
+                v = (int16_t)get_variable(var) - 1;
+                set_variable(var, (uint16_t)v);
+            }
+            handle_branch(v < (int16_t)op2);
+        }
+        break;
+    case 0x05: /* INC_CHK: increment var, branch if > op2 */
+        var = (uint8_t)op1;
+        {
+            int16_t v;
+            if (var == 0u) {
+                v = (int16_t)pop_stack() + 1;
+                push_stack((uint16_t)v);
+            } else {
+                v = (int16_t)get_variable(var) + 1;
+                set_variable(var, (uint16_t)v);
+            }
+            handle_branch(v > (int16_t)op2);
+        }
+        break;
+    case 0x06: /* JIN: branch if obj op1 is child of op2 */
+        handle_branch(get_parent((uint8_t)op1) == (uint8_t)op2);
+        break;
+    case 0x07: /* TEST: branch if op1 & op2 == op2 */
+        handle_branch((op1 & op2) == op2);
+        break;
+    case 0x08: /* OR */
+        set_variable(FETCH_BYTE(), op1 | op2);
+        break;
+    case 0x09: /* AND */
+        set_variable(FETCH_BYTE(), op1 & op2);
+        break;
+    case 0x0A: /* TEST_ATTR: branch if object op1 has attr op2 */
+        {
+            uint16_t addr = get_object_address((uint8_t)op1);
+            uint8_t  byte_idx = (uint8_t)op2 / 8u;
+            uint8_t  bit_mask = 0x80u >> ((uint8_t)op2 & 7u);
+            uint8_t  attr_byte = (addr && byte_idx < 4u)
+                                 ? z_read_byte(addr + byte_idx) : 0u;
+            handle_branch(attr_byte & bit_mask);
+        }
+        break;
+    case 0x0B: /* SET_ATTR */
+        {
+            uint16_t addr = get_object_address((uint8_t)op1);
+            if (addr) {
+                uint8_t byte_idx  = (uint8_t)op2 / 8u;
+                uint8_t bit_mask  = 0x80u >> ((uint8_t)op2 & 7u);
+                z_write_byte(addr + byte_idx,
+                             z_read_byte(addr + byte_idx) | bit_mask);
+            }
+        }
+        break;
+    case 0x0C: /* CLEAR_ATTR */
+        {
+            uint16_t addr = get_object_address((uint8_t)op1);
+            if (addr) {
+                uint8_t byte_idx = (uint8_t)op2 / 8u;
+                uint8_t bit_mask = 0x80u >> ((uint8_t)op2 & 7u);
+                z_write_byte(addr + byte_idx,
+                             z_read_byte(addr + byte_idx) & ~bit_mask);
+            }
+        }
+        break;
+    case 0x0D: /* STORE: store op2 into variable op1 */
+        if ((uint8_t)op1 == 0u) {
+            pop_stack();
+            push_stack(op2);
+        } else {
+            set_variable((uint8_t)op1, op2);
+        }
+        break;
+    case 0x0E: /* INSERT_OBJ: make op1 a child of op2 */
+        {
+            /* Unlink op1 from current parent first */
+            uint8_t obj   = (uint8_t)op1;
+            uint8_t dest  = (uint8_t)op2;
+            uint8_t par   = get_parent(obj);
+            if (par != 0u) {
+                /* Remove from parent's child list */
+                if (get_child(par) == obj) {
+                    set_child(par, get_sibling(obj));
+                } else {
+                    uint8_t sib = get_child(par);
+                    while (sib && get_sibling(sib) != obj)
+                        sib = get_sibling(sib);
+                    if (sib) set_sibling(sib, get_sibling(obj));
+                }
+            }
+            /* Link into dest */
+            set_sibling(obj, get_child(dest));
+            set_child(dest, obj);
+            set_parent(obj, dest);
+        }
+        break;
+    case 0x0F: /* LOADW: load word from array */
+        set_variable(FETCH_BYTE(), z_read_word((uint16_t)(op1 + 2u * op2)));
+        break;
+    case 0x10: /* LOADB: load byte from array */
+        set_variable(FETCH_BYTE(), z_read_byte((uint16_t)(op1 + op2)));
+        break;
+    case 0x11: /* GET_PROP */
+        {
+            uint8_t sz;
+            uint16_t paddr = find_property((uint8_t)op1, (uint8_t)op2, &sz);
+            uint16_t val;
+            if (paddr == 0u) {
+                val = default_property((uint8_t)op2);
+            } else if (sz == 1u) {
+                val = z_read_byte(paddr);
+            } else {
+                val = z_read_word(paddr);
+            }
+            set_variable(FETCH_BYTE(), val);
+        }
+        break;
+    case 0x12: /* GET_PROP_ADDR */
+        {
+            uint8_t sz;
+            uint16_t paddr = find_property((uint8_t)op1, (uint8_t)op2, &sz);
+            set_variable(FETCH_BYTE(), paddr);
+        }
+        break;
+    case 0x13: /* GET_NEXT_PROP */
+        {
+            uint16_t addr = get_object_address((uint8_t)op1);
+            uint16_t pptr = addr ? z_read_word(addr + 7u) : 0u;
+            uint8_t  next = 0u;
+            if (pptr) {
+                uint8_t name_len = z_read_byte(pptr);
+                pptr += 1u + (uint16_t)name_len * 2u;
+                uint8_t target = (uint8_t)op2;
+                if (target == 0u) {
+                    /* Return first property number */
+                    uint8_t sb = z_read_byte(pptr);
+                    next = sb ? (sb & 0x1Fu) : 0u;
+                } else {
+                    /* Skip to target, then return next */
+                    while (1) {
+                        uint8_t sb = z_read_byte(pptr);
+                        if (sb == 0u) break;
+                        uint8_t pnum  = sb & 0x1Fu;
+                        uint8_t psize = (sb >> 5u) + 1u;
+                        pptr += 1u + psize;
+                        if (pnum == target) {
+                            uint8_t nsb = z_read_byte(pptr);
+                            next = nsb ? (nsb & 0x1Fu) : 0u;
+                            break;
+                        }
+                    }
+                }
+            }
+            set_variable(FETCH_BYTE(), next);
+        }
+        break;
+    case 0x14: /* ADD */
+        set_variable(FETCH_BYTE(), (uint16_t)((int16_t)op1 + (int16_t)op2));
+        break;
+    case 0x15: /* SUB */
+        set_variable(FETCH_BYTE(), (uint16_t)((int16_t)op1 - (int16_t)op2));
+        break;
+    case 0x16: /* MUL */
+        set_variable(FETCH_BYTE(), (uint16_t)((int16_t)op1 * (int16_t)op2));
+        break;
+    case 0x17: /* DIV */
+        if (op2 != 0u)
+            set_variable(FETCH_BYTE(), (uint16_t)((int16_t)op1 / (int16_t)op2));
+        break;
+    case 0x18: /* MOD */
+        if (op2 != 0u)
+            set_variable(FETCH_BYTE(), (uint16_t)((int16_t)op1 % (int16_t)op2));
+        break;
+    default:
+        break;
+    }
+}
+
+/* -----------------------------------------------------------------------
  * Main dispatch
  * ----------------------------------------------------------------------- */
 void z_dispatcher_init(void) {
@@ -326,7 +535,7 @@ void z_dispatcher_init(void) {
 
 void execute_next_instruction(void) {
     uint8_t  opcode = FETCH_BYTE();
-    uint16_t op1, op2;
+    uint16_t op1;
     uint8_t  var;
 
     /* ===== LONG form: 2OP 0x00..0x7F ===== */
@@ -335,204 +544,10 @@ void execute_next_instruction(void) {
          * Bit 5: op2 type (0=small const, 1=variable) */
         uint8_t raw1 = FETCH_BYTE();
         uint8_t raw2 = FETCH_BYTE();
-        op1 = (opcode & 0x40u) ? get_variable(raw1) : (uint16_t)raw1;
-        op2 = (opcode & 0x20u) ? get_variable(raw2) : (uint16_t)raw2;
-        uint8_t base_op = opcode & 0x1Fu; /* strip type bits */
-
-        switch (base_op) {
-        case 0x01: /* JE: branch if op1 == op2 */
-            handle_branch(op1 == op2);
-            break;
-        case 0x02: /* JL: branch if op1 < op2 (signed) */
-            handle_branch((int16_t)op1 < (int16_t)op2);
-            break;
-        case 0x03: /* JG: branch if op1 > op2 (signed) */
-            handle_branch((int16_t)op1 > (int16_t)op2);
-            break;
-        case 0x04: /* DEC_CHK: decrement var, branch if < op2 */
-            var = (uint8_t)op1;
-            {
-                int16_t v;
-                if (var == 0u) {
-                    v = (int16_t)pop_stack() - 1;
-                    push_stack((uint16_t)v);
-                } else {
-                    v = (int16_t)get_variable(var) - 1;
-                    set_variable(var, (uint16_t)v);
-                }
-                handle_branch(v < (int16_t)op2);
-            }
-            break;
-        case 0x05: /* INC_CHK: increment var, branch if > op2 */
-            var = (uint8_t)op1;
-            {
-                int16_t v;
-                if (var == 0u) {
-                    v = (int16_t)pop_stack() + 1;
-                    push_stack((uint16_t)v);
-                } else {
-                    v = (int16_t)get_variable(var) + 1;
-                    set_variable(var, (uint16_t)v);
-                }
-                handle_branch(v > (int16_t)op2);
-            }
-            break;
-        case 0x06: /* JIN: branch if obj op1 is child of op2 */
-            handle_branch(get_parent((uint8_t)op1) == (uint8_t)op2);
-            break;
-        case 0x07: /* TEST: branch if op1 & op2 == op2 */
-            handle_branch((op1 & op2) == op2);
-            break;
-        case 0x08: /* OR */
-            set_variable(FETCH_BYTE(), op1 | op2);
-            break;
-        case 0x09: /* AND */
-            set_variable(FETCH_BYTE(), op1 & op2);
-            break;
-        case 0x0A: /* TEST_ATTR: branch if object op1 has attr op2 */
-            {
-                uint16_t addr = get_object_address((uint8_t)op1);
-                uint8_t  byte_idx = op2 / 8u;
-                uint8_t  bit_mask = 0x80u >> (op2 & 7u);
-                uint8_t  attr_byte = (addr && byte_idx < 4u)
-                                     ? z_read_byte(addr + byte_idx) : 0u;
-                handle_branch(attr_byte & bit_mask);
-            }
-            break;
-        case 0x0B: /* SET_ATTR */
-            {
-                uint16_t addr = get_object_address((uint8_t)op1);
-                if (addr) {
-                    uint8_t byte_idx  = op2 / 8u;
-                    uint8_t bit_mask  = 0x80u >> (op2 & 7u);
-                    z_write_byte(addr + byte_idx,
-                                 z_read_byte(addr + byte_idx) | bit_mask);
-                }
-            }
-            break;
-        case 0x0C: /* CLEAR_ATTR */
-            {
-                uint16_t addr = get_object_address((uint8_t)op1);
-                if (addr) {
-                    uint8_t byte_idx = op2 / 8u;
-                    uint8_t bit_mask = 0x80u >> (op2 & 7u);
-                    z_write_byte(addr + byte_idx,
-                                 z_read_byte(addr + byte_idx) & ~bit_mask);
-                }
-            }
-            break;
-        case 0x0D: /* STORE: store op2 into variable op1 */
-            if ((uint8_t)op1 == 0u) {
-                pop_stack();
-                push_stack(op2);
-            } else {
-                set_variable((uint8_t)op1, op2);
-            }
-            break;
-        case 0x0E: /* INSERT_OBJ: make op1 a child of op2 */
-            {
-                /* Unlink op1 from current parent first */
-                uint8_t obj   = (uint8_t)op1;
-                uint8_t dest  = (uint8_t)op2;
-                uint8_t par   = get_parent(obj);
-                if (par != 0u) {
-                    /* Remove from parent's child list */
-                    if (get_child(par) == obj) {
-                        set_child(par, get_sibling(obj));
-                    } else {
-                        uint8_t sib = get_child(par);
-                        while (sib && get_sibling(sib) != obj)
-                            sib = get_sibling(sib);
-                        if (sib) set_sibling(sib, get_sibling(obj));
-                    }
-                }
-                /* Link into dest */
-                set_sibling(obj, get_child(dest));
-                set_child(dest, obj);
-                set_parent(obj, dest);
-            }
-            break;
-        case 0x0F: /* LOADW: load word from array */
-            set_variable(FETCH_BYTE(), z_read_word(op1 + 2u * op2));
-            break;
-        case 0x10: /* LOADB: load byte from array */
-            set_variable(FETCH_BYTE(), z_read_byte(op1 + op2));
-            break;
-        case 0x11: /* GET_PROP */
-            {
-                uint8_t sz;
-                uint16_t paddr = find_property((uint8_t)op1, (uint8_t)op2, &sz);
-                uint16_t val;
-                if (paddr == 0u) {
-                    val = default_property((uint8_t)op2);
-                } else if (sz == 1u) {
-                    val = z_read_byte(paddr);
-                } else {
-                    val = z_read_word(paddr);
-                }
-                set_variable(FETCH_BYTE(), val);
-            }
-            break;
-        case 0x12: /* GET_PROP_ADDR */
-            {
-                uint8_t sz;
-                uint16_t paddr = find_property((uint8_t)op1, (uint8_t)op2, &sz);
-                set_variable(FETCH_BYTE(), paddr);
-            }
-            break;
-        case 0x13: /* GET_NEXT_PROP */
-            {
-                uint16_t addr = get_object_address((uint8_t)op1);
-                uint16_t pptr = addr ? z_read_word(addr + 7u) : 0u;
-                uint8_t  next = 0u;
-                if (pptr) {
-                    uint8_t name_len = z_read_byte(pptr);
-                    pptr += 1u + (uint16_t)name_len * 2u;
-                    uint8_t target = (uint8_t)op2;
-                    if (target == 0u) {
-                        /* Return first property number */
-                        uint8_t sb = z_read_byte(pptr);
-                        next = sb ? (sb & 0x1Fu) : 0u;
-                    } else {
-                        /* Skip to target, then return next */
-                        while (1) {
-                            uint8_t sb = z_read_byte(pptr);
-                            if (sb == 0u) break;
-                            uint8_t pnum  = sb & 0x1Fu;
-                            uint8_t psize = (sb >> 5u) + 1u;
-                            pptr += 1u + psize;
-                            if (pnum == target) {
-                                uint8_t nsb = z_read_byte(pptr);
-                                next = nsb ? (nsb & 0x1Fu) : 0u;
-                                break;
-                            }
-                        }
-                    }
-                }
-                set_variable(FETCH_BYTE(), next);
-            }
-            break;
-        case 0x14: /* ADD */
-            set_variable(FETCH_BYTE(), (uint16_t)((int16_t)op1 + (int16_t)op2));
-            break;
-        case 0x15: /* SUB */
-            set_variable(FETCH_BYTE(), (uint16_t)((int16_t)op1 - (int16_t)op2));
-            break;
-        case 0x16: /* MUL */
-            set_variable(FETCH_BYTE(), (uint16_t)((int16_t)op1 * (int16_t)op2));
-            break;
-        case 0x17: /* DIV */
-            if (op2 != 0u)
-                set_variable(FETCH_BYTE(), (uint16_t)((int16_t)op1 / (int16_t)op2));
-            break;
-        case 0x18: /* MOD */
-            if (op2 != 0u)
-                set_variable(FETCH_BYTE(), (uint16_t)((int16_t)op1 % (int16_t)op2));
-            break;
-        default:
-            /* Unknown 2OP: skip store/branch byte if needed — safest is no-op */
-            break;
-        }
+        uint16_t ops[4];
+        ops[0] = (opcode & 0x40u) ? get_variable(raw1) : (uint16_t)raw1;
+        ops[1] = (opcode & 0x20u) ? get_variable(raw2) : (uint16_t)raw2;
+        execute_2op(opcode & 0x1Fu, ops, 2u);
         return;
     }
 
@@ -705,24 +720,9 @@ void execute_next_instruction(void) {
         uint8_t  nops;
 
         if (opcode < 0xE0u) {
-            /* 0xC0..0xDF: 2OP in VAR form (used for CALL with many args) */
+            /* 0xC0..0xDF: 2OP in VAR form */
             nops = fetch_var_operands(ops);
-            uint8_t base_op = opcode & 0x1Fu;
-            /* These mirror the 2OP table — most commonly it's just CALL */
-            switch (base_op) {
-            case 0x01:
-                {
-                    uint8_t cond = 0u;
-                    if (nops >= 2u && ops[0] == ops[1]) cond = 1u;
-                    if (nops >= 3u && ops[0] == ops[2]) cond = 1u;
-                    if (nops >= 4u && ops[0] == ops[3]) cond = 1u;
-                    handle_branch(cond);
-                }
-                break;
-            case 0x14: if (nops >= 2u) set_variable(FETCH_BYTE(), (uint16_t)((int16_t)ops[0] + (int16_t)ops[1])); break;
-            case 0x15: if (nops >= 2u) set_variable(FETCH_BYTE(), (uint16_t)((int16_t)ops[0] - (int16_t)ops[1])); break;
-            default: break;
-            }
+            execute_2op(opcode & 0x1Fu, ops, nops);
             return;
         }
 
@@ -736,11 +736,11 @@ void execute_next_instruction(void) {
             break;
         case 0xE1: /* STOREW: array word store */
             if (nops >= 3u)
-                z_write_word(ops[0] + 2u * ops[1], ops[2]);
+                z_write_word((uint16_t)(ops[0] + 2u * ops[1]), ops[2]);
             break;
         case 0xE2: /* STOREB: array byte store */
             if (nops >= 3u)
-                z_write_byte(ops[0] + ops[1], (uint8_t)ops[2]);
+                z_write_byte((uint16_t)(ops[0] + ops[1]), (uint8_t)ops[2]);
             break;
         case 0xE3: /* PUT_PROP */
             if (nops >= 3u) {
@@ -798,13 +798,7 @@ void execute_next_instruction(void) {
             break;
         case 0xE9: /* PULL */
             if (nops >= 1u) {
-                uint8_t v = (uint8_t)ops[0];
-                if (v == 0u) {
-                    uint8_t dest = (uint8_t)pop_stack();
-                    set_variable(dest, pop_stack());
-                } else {
-                    set_variable(v, pop_stack());
-                }
+                set_variable((uint8_t)ops[0], pop_stack());
             }
             break;
         case 0xEA: /* SPLIT_WINDOW — no-op on GB */

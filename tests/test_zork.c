@@ -226,6 +226,57 @@ void test_status_bar(void) {
     printf("  Status bar tests passed!\n");
 }
 
+void test_2op_var_form_and_array_ops(void) {
+    printf("[TEST] Testing 2OP instructions in VAR form and array address wrapping...\n");
+
+    /* Test 2OP in VAR form: ADD (0xC0 | 0x14 = 0xD4) */
+    /* Byte sequence: 0xD4 0x5F 0x10 0x20 0x01
+     * 0xD4 = 2OP VAR form, opcode 0x14 (ADD)
+     * 0x5F = type byte: 01 (small const), 01 (small const), 11 (omitted), 11 (omitted)
+     * 0x10 = op1 (small const 0x10)
+     * 0x20 = op2 (small const 0x20)
+     * 0x01 = result store variable (variable 1)
+     */
+    uint32_t code_addr = 0x0300;
+    z_write_byte(code_addr, 0xD4);
+    z_write_byte(code_addr + 1, 0x5F);
+    z_write_byte(code_addr + 2, 0x10);
+    z_write_byte(code_addr + 3, 0x20);
+    z_write_byte(code_addr + 4, 0x01); /* store in local 1 */
+
+    z_machine_pc = code_addr;
+
+    /* Setup call frame so local 1 exists */
+    fp = 0;
+    call_stack[0].num_locals = 2;
+    call_stack[0].locals[0] = 0;
+
+    execute_next_instruction();
+
+    /* Local 1 (var 1) should hold 0x10 + 0x20 = 0x30 = 48 */
+    assert(get_variable(1) == 48);
+
+    /* Test STOREW / LOADW address wrapping */
+    /* STOREW at array 0xFFFE with word index 2 => 0xFFFE + 4 = 0x10002 -> wrapped to 0x0002 */
+    /* Byte sequence for STOREW (0xE1): 0xE1 0x03 0xFF 0xFE 0x00 0x02 0x12 0x34
+     * 0xE1 = VAR op 0x01 (STOREW)
+     * 0x03 = operand types: large const (00), large const (00), large const (00), omitted (11) -> 0x03
+     */
+    z_write_byte(code_addr, 0xE1);
+    z_write_byte(code_addr + 1, 0x03);
+    z_write_word(code_addr + 2, 0xFFFE);
+    z_write_word(code_addr + 4, 0x0002);
+    z_write_word(code_addr + 6, 0x1234);
+
+    z_machine_pc = code_addr;
+    execute_next_instruction();
+
+    /* Check that address 0x0002 in dynamic RAM received 0x1234 */
+    assert(z_read_word(0x0002) == 0x1234);
+
+    printf("  2OP VAR form and array address wrapping tests passed!\n");
+}
+
 void test_save_restore(void) {
     printf("[TEST] Testing save and restore state...\n");
     memset(mock_sram, 0, sizeof(mock_sram));
@@ -279,6 +330,7 @@ int main(void) {
     test_dictionary_tokenization();
     test_screen_scrolling();
     test_status_bar();
+    test_2op_var_form_and_array_ops();
     test_save_restore();
 
     printf("\nAll unit tests completed successfully!\n");

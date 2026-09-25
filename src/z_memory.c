@@ -20,7 +20,9 @@
 
 static uint8_t z_wram[Z_DYNAMIC_WRAM_SIZE];
 
+#ifndef SRAM_BASE
 #define SRAM_BASE ((uint8_t *)0xA000u)
+#endif
 #define SRAM_BANK_SIZE 0x2000u
 
 #define Z_DYNAMIC_SRAM_BANK 0u

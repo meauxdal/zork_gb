@@ -41,6 +41,29 @@ uint32_t z_machine_pc;
 #define FETCH_BYTE() (z_read_byte(z_machine_pc++))
 #define FETCH_WORD() (z_machine_pc += 2u, z_read_word(z_machine_pc - 2u))
 
+/* Decode a Z-string and send its characters to the renderer. */
+static char z_string_buffer[256];
+
+static uint32_t print_z_string(uint32_t addr) {
+    int out_idx = 0;
+    int i;
+    uint32_t next_addr;
+
+    next_addr = decode_z_string(
+        addr,
+        z_string_buffer,
+        &out_idx,
+        (int)sizeof(z_string_buffer),
+        0
+    );
+
+    for (i = 0; i < out_idx; i++) {
+        z_render_put_char(z_string_buffer[i]);
+    }
+
+    return next_addr;
+}
+
 /* -----------------------------------------------------------------------
  * Read a VAR-form operand type byte, fill ops[], return operand count.
  * type bits: 00=large const 01=small const 10=variable 11=omitted
@@ -643,10 +666,10 @@ void execute_next_instruction(void) {
                 return_from_routine(0u);
                 break;
             case 0xB2: /* PRINT (inline z-string) */
-                z_machine_pc = decode_zstring(z_machine_pc);
+                z_machine_pc = print_z_string(z_machine_pc);
                 break;
             case 0xB3: /* PRINT_RET */
-                z_machine_pc = decode_zstring(z_machine_pc);
+                z_machine_pc = print_z_string(z_machine_pc);
                 z_render_put_char('\n');
                 return_from_routine(1u);
                 break;
@@ -745,7 +768,7 @@ void execute_next_instruction(void) {
                 }
                 break;
             case 0x07: /* PRINT_ADDR: print z-string at byte address */
-                decode_zstring((uint32_t)op1);
+                print_z_string((uint32_t)op1);
                 break;
             case 0x09: /* REMOVE_OBJ */
                 {
@@ -775,7 +798,7 @@ void execute_next_instruction(void) {
                 z_machine_pc = (uint32_t)((int32_t)z_machine_pc + (int16_t)op1 - 2);
                 break;
             case 0x0D: /* PRINT_PADDR: print z-string at packed address */
-                decode_zstring((uint32_t)op1 * 2u);
+                print_z_string((uint32_t)op1 * 2u);
                 break;
             case 0x0E: /* LOAD: load variable */
                 {

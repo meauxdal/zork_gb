@@ -29,7 +29,7 @@ static uint8_t z_wram[Z_DYNAMIC_WRAM_SIZE];
 #define Z_SAVE_SRAM_FIRST   1u
 
 static uint16_t z_static_base = Z_DYNAMIC_SIZE;
-static const char SAVE_MAGIC[8] = "ZORKGB01";
+static const char SAVE_MAGIC[] = "ZORKGB01";
 
 /* Temporary buffer for copying between SRAM banks. */
 static uint8_t sram_copy_buf[128];

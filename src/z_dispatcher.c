@@ -250,9 +250,11 @@ static void op_sread(uint16_t text_buf, uint16_t parse_buf) {
     uint8_t max_chars     = z_read_byte(text_buf);
     uint8_t count         = 0;
     uint8_t candidate_idx = 0;
-    uint8_t old_pad       = 0;
+    uint8_t old_pad       = joypad();
     uint8_t repeat_timer  = 0;
     char    c;
+
+    z_render_reset_line_count();
 
     while (count < max_chars - 1u) {
         /* Display candidate character at current cursor position */

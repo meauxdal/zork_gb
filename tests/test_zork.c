@@ -11,10 +11,20 @@
 #include <string.h>
 #include <assert.h>
 
+#define J_A      0x01
+#define J_B      0x02
+#define J_SELECT 0x04
+#define J_START  0x08
+#define J_RIGHT  0x10
+#define J_LEFT   0x20
+#define J_UP     0x40
+#define J_DOWN   0x80
+
 /* Mock Game Boy hardware / GBDK functions */
 uint8_t mock_vram[18][20];
 static uint8_t mock_joypad_state = 0;
 static uint8_t mock_sb_reg = 0xFF;
+static uint8_t more_prompt_seen = 0;
 
 void set_bkg_tile_xy(uint8_t x, uint8_t y, uint8_t tile) {
     if (x < 20 && y < 18) {
@@ -22,7 +32,16 @@ void set_bkg_tile_xy(uint8_t x, uint8_t y, uint8_t tile) {
     }
 }
 
-void wait_vbl_done(void) {}
+void wait_vbl_done(void) {
+    /* If [MORE] prompt is shown at row 17 cols 14..19, simulate key press & release */
+    if (mock_vram[17][14] == '[' && mock_vram[17][15] == 'M') {
+        more_prompt_seen = 1;
+        if (mock_joypad_state == 0) mock_joypad_state = J_A;
+        else mock_joypad_state = 0;
+    } else {
+        mock_joypad_state = 0;
+    }
+}
 
 uint8_t joypad(void) {
     return mock_joypad_state;
@@ -46,14 +65,6 @@ static void handle_sc_write(uint8_t val) {
 /* Intercept writes to SC_REG in test code */
 #define SC_REG_WRITE(val) handle_sc_write(val)
 
-#define J_A      0x01
-#define J_B      0x02
-#define J_SELECT 0x04
-#define J_START  0x08
-#define J_RIGHT  0x10
-#define J_LEFT   0x20
-#define J_UP     0x40
-#define J_DOWN   0x80
 
 #define SWITCH_ROM(b) ((void)(b))
 
@@ -200,8 +211,9 @@ void test_screen_scrolling(void) {
     printf("[TEST] Testing screen renderer and scrolling...\n");
     memset(mock_vram, 0, sizeof(mock_vram));
     z_render_init();
+    more_prompt_seen = 0;
 
-    /* Fill text area lines 1..17 */
+    /* Fill text area lines 1..20 */
     for (int line = 1; line <= 20; line++) {
         char msg[20];
         snprintf(msg, sizeof(msg), "Line %d", line);
@@ -211,7 +223,10 @@ void test_screen_scrolling(void) {
         z_render_put_char('\n');
     }
 
-    /* Verify bottom row (row 17, index 16) holds Line 20 */
+    /* Verify that [MORE] prompt was triggered during page overflow */
+    assert(more_prompt_seen == 1);
+
+    /* Verify line 20 is at y=16 (since newline after Line 20 scrolled it up) */
     char expected[20];
     snprintf(expected, sizeof(expected), "Line 20");
     for (size_t i = 0; i < strlen(expected); i++) {

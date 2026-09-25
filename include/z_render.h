@@ -16,6 +16,7 @@
 
 void z_render_init(void);
 void z_render_put_char(char c);
+void z_render_reset_line_count(void);
 
 /* Candidate character display for hi-score style D-Pad entry */
 void z_render_show_candidate(char c);

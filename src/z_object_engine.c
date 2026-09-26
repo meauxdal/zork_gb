@@ -7,6 +7,7 @@
 #include "z_object_engine.h"
 #include "z_memory.h"
 #include "z_string_decoder.h"
+#include "z_render.h"
 
 uint16_t get_object_address(uint8_t obj_id) {
     if (obj_id == 0u) return 0u;
@@ -19,8 +20,14 @@ void get_object_name(uint8_t obj_id) {
     uint16_t addr = get_object_address(obj_id);
     if (addr == 0u) return;
     uint16_t prop_ptr = z_read_word(addr + 7u);
+    if (prop_ptr == 0u) return;
     /* prop_ptr[0] = name length in words; name z-string follows */
-    decode_zstring((uint32_t)prop_ptr + 1u);
+    char buf[128];
+    int out_idx = 0;
+    decode_z_string((uint32_t)prop_ptr + 1u, buf, &out_idx, (int)sizeof(buf), 0);
+    for (int i = 0; i < out_idx; i++) {
+        z_render_put_char(buf[i]);
+    }
 }
 
 uint8_t get_parent(uint8_t obj_id) {

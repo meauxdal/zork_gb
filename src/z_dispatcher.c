@@ -516,12 +516,7 @@ static void execute_2op(uint8_t base_op, uint16_t ops[4], uint8_t nops) {
         }
         break;
     case 0x0D: /* STORE: store op2 into variable op1 */
-        if ((uint8_t)op1 == 0u) {
-            pop_stack();
-            push_stack(op2);
-        } else {
-            set_variable((uint8_t)op1, op2);
-        }
+        set_variable((uint8_t)op1, op2);
         break;
     case 0x0E: /* INSERT_OBJ: make op1 a child of op2 */
         {
@@ -711,11 +706,23 @@ void execute_next_instruction(void) {
         /* 1OP: bits 5:4 of opcode encode operand type */
         {
             uint8_t op_type = (opcode >> 4u) & 0x03u;
-            if      (op_type == 0u) op1 = FETCH_WORD();          /* large const */
-            else if (op_type == 1u) op1 = FETCH_BYTE();          /* small const */
-            else                    op1 = get_variable(FETCH_BYTE()); /* variable */
-
             uint8_t base_op = opcode & 0x0Fu;
+
+            if (base_op == 0x05u || base_op == 0x06u || base_op == 0x0Eu) {
+                /* INC, DEC, LOAD expect op1 to be the variable number.
+                 * If op_type == 2 (variable), read that variable to get target var number. */
+                if      (op_type == 0u) op1 = FETCH_WORD();
+                else if (op_type == 1u) op1 = FETCH_BYTE();
+                else {
+                    uint8_t v = FETCH_BYTE();
+                    op1 = (v == 0u) ? pop_stack() : get_variable(v);
+                }
+            } else {
+                if      (op_type == 0u) op1 = FETCH_WORD();
+                else if (op_type == 1u) op1 = FETCH_BYTE();
+                else                    op1 = get_variable(FETCH_BYTE());
+            }
+
             switch (base_op) {
             case 0x00: /* JZ: branch if op1 == 0 */
                 handle_branch(op1 == 0u);

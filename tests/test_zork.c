@@ -22,7 +22,8 @@
 
 /* Mock Game Boy hardware / GBDK functions */
 uint8_t mock_vram[18][20];
-static uint8_t mock_joypad_state = 0;
+uint8_t joypad_state = 0;
+#define mock_joypad_state joypad_state
 static uint8_t mock_sb_reg = 0xFF;
 static uint8_t more_prompt_seen = 0;
 
